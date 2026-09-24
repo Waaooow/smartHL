@@ -93,7 +93,13 @@
       var devEl = f.querySelector('[data-dev]');
       var dev = devEl ? devEl.getAttribute('data-dev') : '';
       applyVal(dev, key, fd.get('value'));
-      fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}}).catch(function(){});
+      fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}})
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+          if (j.ok) { window.showToast('Terkirim: ' + j.key + '=' + j.value, true); }
+          else { window.showToast('Gagal: ' + (j.error || '?'), false); }
+        })
+        .catch(function() { window.showToast('Gagal kirim perintah', false); });
     });
   });
   async function poll() {

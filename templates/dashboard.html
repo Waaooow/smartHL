@@ -3,19 +3,9 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="page-head">
-    <h1>Halo, Admin!</h1>
+    <h1>Halo, {{ session.get('display_name', 'Admin') }}!</h1>
     <p>Monitoring sistem SmartHome anda.</p>
 </div>
-
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, message in messages %}
-      <div class="alert alert-{{ category }}">
-        <i class="fas fa-info-circle"></i> {{ message }}
-      </div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
 
 <div style="display:flex; justify-content:flex-end; margin-bottom:25px;">
     <button class="btn-add" onclick="document.getElementById('addModal').style.display='flex'">

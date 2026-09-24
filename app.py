@@ -79,6 +79,10 @@ def init_db():
     conn = get_db_connection()
     # 1. Pastikan tabel utama ada
     conn.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT)')
+    try:
+        conn.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
+    except Exception:
+        pass
     conn.execute('''
         CREATE TABLE IF NOT EXISTS devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +115,23 @@ def init_db():
         sort INTEGER DEFAULT 0
     )''')
     conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_func_dev_key ON device_functions(device_id, key)')
+    for col in ['alert_above REAL', 'alert_below REAL']:
+        try:
+            conn.execute(f'ALTER TABLE device_functions ADD COLUMN {col}')
+        except Exception:
+            pass
+    # Notifikasi (fondasi alert sensor: smoke, movement, ambang, dsb.)
+    conn.execute('''CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER,
+        key TEXT DEFAULT '',
+        title TEXT NOT NULL,
+        message TEXT DEFAULT '',
+        level TEXT DEFAULT 'info',
+        read INTEGER DEFAULT 0,
+        ts DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_notif_read_ts ON notifications(read, ts)')
     for col in ['mqtt_id TEXT', 'token TEXT', 'last_seen DATETIME']:
         try:
             conn.execute(f'ALTER TABLE devices ADD COLUMN {col}')
@@ -131,16 +152,61 @@ def login_page():
 
 @app.route('/login', methods=['POST'])
 def login_action():
+    from werkzeug.security import check_password_hash, generate_password_hash
     username = request.form['username']
     password = request.form['password']
     conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, password)).fetchone()
-    conn.close()
+    user = conn.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    ok = False
     if user:
+        stored = user['password'] or ''
+        if stored.startswith(('pbkdf2:', 'scrypt:')):
+            ok = check_password_hash(stored, password)
+        elif stored == password:
+            # migrasi sekali jalan: plaintext lama -> hash
+            ok = True
+            conn.execute('UPDATE users SET password=? WHERE id=?',
+                         (generate_password_hash(password), user['id']))
+            conn.commit()
+    if user and ok:
         session['logged_in'] = True
+        session['user_id'] = user['id']
+        session['display_name'] = user['display_name'] or user['username']
+        conn.close()
         return redirect(url_for('dashboard'))
+    conn.close()
     flash('Username atau password salah!', 'error')
     return redirect(url_for('login_page'))
+
+def notify(conn, device_id, key, title, message, level='info'):
+    conn.execute(
+        "INSERT INTO notifications (device_id, key, title, message, level) VALUES (?,?,?,?,?)",
+        (device_id, key, title, message, level))
+
+def check_alerts(conn, device_id, readings: dict):
+    """Buat notifikasi bila nilai melewati ambang fungsi. Cooldown 15 mnt per device+key."""
+    funcs = conn.execute(
+        "SELECT key, label, alert_above, alert_below FROM device_functions WHERE device_id=?",
+        (device_id,)).fetchall()
+    for f in funcs:
+        if f['key'] not in readings:
+            continue
+        v = readings[f['key']]
+        hit = None
+        if f['alert_above'] is not None and v > f['alert_above']:
+            hit = ('warning', f"melewati batas atas {f['alert_above']}")
+        elif f['alert_below'] is not None and v < f['alert_below']:
+            hit = ('warning', f"di bawah batas {f['alert_below']}")
+        if not hit:
+            continue
+        recent = conn.execute(
+            """SELECT id FROM notifications WHERE device_id=? AND key=?
+               AND ts > datetime('now','-15 minutes') LIMIT 1""",
+            (device_id, f['key'])).fetchone()
+        if recent:
+            continue
+        notify(conn, device_id, f['key'], f"{f['label']}: {v}",
+               f"Nilai {v} {hit[1]}", level=hit[0])
 
 @app.route('/dashboard')
 def dashboard():
@@ -311,12 +377,22 @@ def add_function(id):
     if kind not in FUNC_KINDS or not key or not key.replace('_', '').isalnum():
         flash('Fungsi tidak valid (key alfanumerik, kind: sensor/toggle/button/slider)', 'error')
         return redirect(url_for('device_detail', id=id))
+    def _num(v):
+        v = (v or '').strip()
+        if not v:
+            return None
+        try:
+            return float(v)
+        except ValueError:
+            return None
+    alert_above = _num(request.form.get('alert_above'))
+    alert_below = _num(request.form.get('alert_below'))
     conn = get_db_connection()
     try:
         conn.execute(
-            "INSERT INTO device_functions (device_id, key, label, kind, unit, pin, sort)"
-            " VALUES (?,?,?,?,?,?,COALESCE((SELECT MAX(sort)+1 FROM device_functions WHERE device_id=?),1))",
-            (id, key, label, kind, unit, pin, id))
+            "INSERT INTO device_functions (device_id, key, label, kind, unit, pin, sort, alert_above, alert_below)"
+            " VALUES (?,?,?,?,?,?,COALESCE((SELECT MAX(sort)+1 FROM device_functions WHERE device_id=?),1),?,?)",
+            (id, key, label, kind, unit, pin, id, alert_above, alert_below))
         conn.commit()
         flash(f"Fungsi {label} ditambah", 'success')
     except Exception:
@@ -393,14 +469,18 @@ def api_telemetry():
     if not device or device['token'] != token:
         conn.close()
         return jsonify({"error": "unauthorized"}), 401
+    readings = {}
     for k, v in data.items():
         if k == "mqtt_id" or not k.replace("_", "").isalnum() or len(k) > 24:
             continue
         try:
+            fv = float(v)
             conn.execute("INSERT INTO telemetry (device_id, key, value) VALUES (?,?,?)",
-                         (device['id'], k.lower(), float(v)))
+                         (device['id'], k.lower(), fv))
+            readings[k.lower()] = fv
         except (TypeError, ValueError):
             pass
+    check_alerts(conn, device['id'], readings)
     conn.execute("UPDATE devices SET status='Online', last_seen=CURRENT_TIMESTAMP WHERE id=?",
                  (device['id'],))
     conn.commit()
@@ -415,6 +495,100 @@ def health():
 def logout():
     session.clear()
     return redirect(url_for('login_page'))
+
+@app.route('/profile')
+def profile_page():
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    user = conn.execute('SELECT id, username, display_name FROM users WHERE id=?',
+                        (session.get('user_id'),)).fetchone()
+    conn.close()
+    return render_template('profile.html', user=dict(user) if user else {})
+
+@app.route('/profile', methods=['POST'])
+def profile_update():
+    from werkzeug.security import check_password_hash, generate_password_hash
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id=?', (session.get('user_id'),)).fetchone()
+    if not user:
+        conn.close()
+        return redirect(url_for('login_page'))
+    name = (request.form.get('display_name') or '').strip() or user['username']
+    conn.execute('UPDATE users SET display_name=? WHERE id=?', (name, user['id']))
+    session['display_name'] = name
+    new_pw = request.form.get('new_password') or ''
+    if new_pw:
+        stored = user['password'] or ''
+        cur_ok = (check_password_hash(stored, request.form.get('current_password', ''))
+                  if stored.startswith(('pbkdf2:', 'scrypt:'))
+                  else stored == request.form.get('current_password', ''))
+        if not cur_ok:
+            conn.close()
+            flash('Password lama salah', 'error')
+            return redirect(url_for('profile_page'))
+        if len(new_pw) < 4:
+            conn.close()
+            flash('Password baru minimal 4 karakter', 'error')
+            return redirect(url_for('profile_page'))
+        conn.execute('UPDATE users SET password=? WHERE id=?',
+                     (generate_password_hash(new_pw), user['id']))
+    conn.commit()
+    conn.close()
+    flash('Profil disimpan', 'success')
+    return redirect(url_for('profile_page'))
+
+@app.route('/notifications')
+def notifications_page():
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    rows = conn.execute(
+        """SELECT n.*, d.name AS device_name FROM notifications n
+           LEFT JOIN devices d ON d.id=n.device_id
+           ORDER BY n.ts DESC LIMIT 100""").fetchall()
+    conn.close()
+    return render_template('notifications.html', items=[dict(r) for r in rows])
+
+@app.route('/notifications/read', methods=['POST'])
+def notifications_read():
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    conn.execute('UPDATE notifications SET read=1 WHERE read=0')
+    conn.commit()
+    conn.close()
+    flash('Semua notifikasi ditandai dibaca', 'success')
+    return redirect(url_for('notifications_page'))
+
+@app.route('/api/notifications')
+def api_notifications():
+    if not session.get('logged_in'):
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        limit = max(1, min(50, int(request.args.get('limit', '8'))))
+    except ValueError:
+        limit = 8
+    conn = get_db_connection()
+    rows = conn.execute(
+        """SELECT n.*, d.name AS device_name FROM notifications n
+           LEFT JOIN devices d ON d.id=n.device_id
+           ORDER BY n.ts DESC LIMIT ?""", (limit,)).fetchall()
+    unread = conn.execute('SELECT COUNT(*) c FROM notifications WHERE read=0').fetchone()['c']
+    conn.close()
+    return jsonify({"unread": unread, "items": [dict(r) for r in rows]})
+
+@app.route('/api/notifications/read', methods=['POST'])
+def api_notifications_read():
+    if not session.get('logged_in'):
+        return jsonify({"error": "unauthorized"}), 401
+    conn = get_db_connection()
+    conn.execute('UPDATE notifications SET read=1 WHERE read=0')
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 def _start_bridge_thread():
     try:

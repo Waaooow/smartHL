@@ -19,12 +19,25 @@
             background:rgba(255,255,255,.1); backdrop-filter:blur(15px);
             border-right:1px solid rgba(255,255,255,.1); padding:30px 20px;
             display:flex; flex-direction:column; transition:transform .25s ease; }
-        .sidebar h2 { font-size:1.5rem; margin-bottom:40px; text-align:center; letter-spacing:2px; }
+        .sidebar h2 { font-size:1.5rem; margin-bottom:30px; text-align:center; letter-spacing:2px; }
         .sidebar h2 span { font-weight:300; }
         .nav-menu { list-style:none; }
         .nav-item { padding:15px; margin-bottom:10px; border-radius:10px; display:flex; align-items:center; text-decoration:none; color:white; }
         .nav-item i { margin-right:15px; width:20px; }
         .nav-item:hover, .nav-item.active { background:rgba(255,255,255,.2); }
+        .badge { margin-left:auto; background:#ff4757; border-radius:12px; padding:1px 9px; font-size:.75rem; font-weight:bold; }
+        .badge.hide { display:none; }
+        .user-card { margin-top:auto; position:relative; }
+        .user-btn { width:100%; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.12);
+            border:1px solid rgba(255,255,255,.15); color:white; border-radius:12px; padding:10px 12px; cursor:pointer; }
+        .avatar { width:32px; height:32px; border-radius:50%; background:#fff; color:#764ba2;
+            display:flex; align-items:center; justify-content:center; flex:none; }
+        .user-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.9rem; }
+        .dropdown { display:none; position:absolute; bottom:110%; left:0; right:0; background:rgba(80,70,150,.97);
+            border:1px solid rgba(255,255,255,.2); border-radius:12px; overflow:hidden; box-shadow:0 12px 30px rgba(0,0,0,.35); }
+        .dropdown.open { display:block; }
+        .dropdown a { display:flex; gap:10px; align-items:center; padding:12px 14px; text-decoration:none; font-size:.9rem; }
+        .dropdown a:hover { background:rgba(255,255,255,.15); }
 
         .main-content { margin-left:250px; padding:40px; min-height:100vh; }
         .page-head { margin-bottom:25px; }
@@ -75,14 +88,45 @@
         #addModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.6); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:20px; }
         .modal-content { background:rgba(120,110,180,.95); border:1px solid rgba(255,255,255,.2); padding:30px; border-radius:25px; width:100%; max-width:400px; box-shadow:0 25px 50px rgba(0,0,0,.3); text-align:center; max-height:90vh; overflow-y:auto; }
 
-        /* --- Mobile: hamburger + drawer --- */
+        /* --- Toast mengambang (pengganti alert statis) --- */
+        #toasts { position:fixed; top:16px; right:16px; z-index:2000; display:flex; flex-direction:column; gap:10px; max-width:min(360px, calc(100vw - 32px)); }
+        .toast { background:rgba(60,55,120,.95); border:1px solid rgba(255,255,255,.25); border-left:4px solid #4cd137;
+            border-radius:12px; padding:12px 14px; font-size:.85rem; box-shadow:0 10px 30px rgba(0,0,0,.35);
+            display:flex; gap:10px; align-items:flex-start; animation:slideIn .25s ease; }
+        .toast.err { border-left-color:#ff4757; }
+        .toast i { margin-top:2px; }
+        @keyframes slideIn { from { transform:translateX(30px); opacity:0; } to { transform:none; opacity:1; } }
+
+        /* --- Bell + panel notifikasi --- */
+        .icon-btn { position:relative; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);
+            color:white; border-radius:10px; padding:8px 11px; cursor:pointer; font-size:1rem; }
+        .icon-btn .badge { position:absolute; top:-7px; right:-7px; margin:0; }
+        #notifPanel { display:none; position:fixed; top:64px; right:16px; z-index:2000; width:min(360px, calc(100vw - 32px));
+            background:rgba(60,55,120,.97); border:1px solid rgba(255,255,255,.2); border-radius:14px;
+            box-shadow:0 16px 40px rgba(0,0,0,.4); overflow:hidden; }
+        #notifPanel.open { display:block; }
+        #notifPanel .np-head { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.15); font-weight:bold; }
+        #notifPanel .np-head a { font-size:.8rem; opacity:.8; }
+        .np-item { padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.1); font-size:.85rem; }
+        .np-item.unread { background:rgba(255,255,255,.07); }
+        .np-item .t { font-weight:bold; }
+        .np-item .m { opacity:.75; font-size:.8rem; }
+        .np-item .ts { opacity:.5; font-size:.75rem; }
+        .np-item.warn .t { color:#ffd166; }
+        .np-item.critical .t { color:#ff6b81; }
+
+        /* --- Mobile --- */
         @media (max-width: 860px) {
-            .topbar { display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:150;
+            .topbar { display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:150;
                 padding:12px 16px; background:rgba(90,80,160,.85); backdrop-filter:blur(12px);
                 border-bottom:1px solid rgba(255,255,255,.15); }
-            .topbar button { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); color:white;
+            .topbar button#navToggle { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); color:white;
                 border-radius:10px; padding:8px 12px; font-size:1.1rem; cursor:pointer; }
-            .topbar span { font-weight:600; letter-spacing:2px; }
+            .topbar .brand { font-weight:600; letter-spacing:2px; }
+            .topbar .spacer { flex:1; }
+            .topbar .avatar { width:30px; height:30px; font-size:.85rem; }
+            #userMenuTop { position:relative; }
+            #userMenuTop .dropdown { position:fixed; top:60px; right:12px; left:auto; bottom:auto; width:200px; z-index:2001; }
             .sidebar { transform:translateX(-105%); width:270px; padding-top:20px; box-shadow:20px 0 50px rgba(0,0,0,.35); }
             .sidebar.open { transform:translateX(0); }
             body.nav-open #navOverlay { display:block; position:fixed; inset:0; z-index:190; background:rgba(0,0,0,.45); }
@@ -90,7 +134,6 @@
             .main-content { margin-left:0; padding:20px 16px 40px; }
             .page-head h1 { font-size:1.4rem; }
             .card { padding:18px; }
-            /* tabel jadi kartu bertumpuk */
             table.data.stack { min-width:0; }
             table.data.stack thead { display:none; }
             table.data.stack, table.data.stack tbody, table.data.stack tr, table.data.stack td { display:block; width:100%; }
@@ -105,7 +148,16 @@
 <body>
     <div class="topbar">
         <button id="navToggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
-        <span>smartHL</span>
+        <span class="brand">smartHL</span>
+        <span class="spacer"></span>
+        <button class="icon-btn" id="bellTop" aria-label="Notifikasi"><i class="fas fa-bell"></i><span class="badge hide" data-unread></span></button>
+        <span id="userMenuTop">
+            <button class="icon-btn" id="avatarTop" aria-label="Profil" style="padding:0; border:none; background:none;"><span class="avatar"><i class="fas fa-user"></i></span></button>
+            <span class="dropdown" id="ddTop">
+                <a href="{{ url_for('profile_page') }}"><i class="fas fa-user-cog"></i> Profil</a>
+                <a href="/logout"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+            </span>
+        </span>
     </div>
     <div id="navOverlay"></div>
     <div class="sidebar" id="sidebar">
@@ -114,25 +166,122 @@
             <a href="{{ url_for('dashboard') }}" class="nav-item {% if active=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i> Dashboard</a>
             <a href="{{ url_for('devices_page') }}" class="nav-item {% if active=='devices' %}active{% endif %}"><i class="fas fa-microchip"></i> Perangkat</a>
             <a href="{{ url_for('kontrol_page') }}" class="nav-item {% if active=='kontrol' %}active{% endif %}"><i class="fas fa-sliders-h"></i> Kontrol</a>
-            <a href="/logout" class="nav-item" style="margin-top:auto;"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+            <a href="{{ url_for('notifications_page') }}" class="nav-item {% if active=='notifications' %}active{% endif %}"><i class="fas fa-bell"></i> Notifikasi <span class="badge hide" data-unread></span></a>
         </ul>
+        <div class="user-card">
+            <button class="user-btn" id="avatarSide"><span class="avatar"><i class="fas fa-user"></i></span><span>{{ session.get('display_name', 'Admin') }}</span></button>
+            <div class="dropdown" id="ddSide">
+                <a href="{{ url_for('profile_page') }}"><i class="fas fa-user-cog"></i> Profil</a>
+                <a href="/logout"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+            </div>
+        </div>
     </div>
+    <div id="notifPanel">
+        <div class="np-head"><span>Notifikasi</span><a href="{{ url_for('notifications_page') }}">Lihat semua</a></div>
+        <div id="notifList"><div class="np-item"><span class="m">Memuat...</span></div></div>
+    </div>
+    <div id="toasts"></div>
     <div class="main-content">
+        {# flash server -> toast mengambang saat load #}
+        <div id="serverFlash" style="display:none;">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}{% for category, message in messages %}
+            <span data-flash="{{ category }}">{{ message }}</span>
+          {% endfor %}{% endif %}
+        {% endwith %}
+        </div>
         {% block content %}{% endblock %}
     </div>
 <script>
 (function() {
+  // Drawer mobile
   var sb = document.getElementById('sidebar');
   var tg = document.getElementById('navToggle');
   var ov = document.getElementById('navOverlay');
-  function close() { sb.classList.remove('open'); document.body.classList.remove('nav-open'); }
+  function closeNav() { sb.classList.remove('open'); document.body.classList.remove('nav-open'); }
   if (tg) tg.addEventListener('click', function() {
     sb.classList.toggle('open');
     document.body.classList.toggle('nav-open', sb.classList.contains('open'));
   });
-  if (ov) ov.addEventListener('click', close);
-  document.querySelectorAll('.nav-item').forEach(function(a) { a.addEventListener('click', close); });
-  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+  if (ov) ov.addEventListener('click', closeNav);
+  document.querySelectorAll('.nav-item').forEach(function(a) { a.addEventListener('click', closeNav); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeNav(); closePanel(); } });
+
+  // Dropdown profil
+  function bindDrop(btnId, ddId) {
+    var b = document.getElementById(btnId), d = document.getElementById(ddId);
+    if (!b || !d) return;
+    b.addEventListener('click', function(e) { e.stopPropagation(); d.classList.toggle('open'); });
+    document.addEventListener('click', function() { d.classList.remove('open'); });
+  }
+  bindDrop('avatarTop', 'ddTop');
+  bindDrop('avatarSide', 'ddSide');
+
+  // Toast global
+  window.showToast = function(txt, ok) {
+    var box = document.getElementById('toasts');
+    var d = document.createElement('div');
+    d.className = 'toast' + (ok === false ? ' err' : '');
+    d.innerHTML = '<i class="fas ' + (ok === false ? 'fa-exclamation-circle' : 'fa-check-circle') + '"></i><span></span>';
+    d.querySelector('span').textContent = txt;
+    box.appendChild(d);
+    setTimeout(function(){ d.remove(); }, 4500);
+  };
+  document.querySelectorAll('#serverFlash [data-flash]').forEach(function(el) {
+    showToast(el.textContent, el.getAttribute('data-flash') !== 'error');
+  });
+
+  // Badge + panel notifikasi
+  var panel = document.getElementById('notifPanel');
+  function closePanel() { if (panel) panel.classList.remove('open'); }
+  window.toggleNotif = function() {
+    if (!panel) return;
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) loadNotif();
+  };
+  var bellTop = document.getElementById('bellTop');
+  if (bellTop) bellTop.addEventListener('click', function(e) { e.stopPropagation(); toggleNotif(); });
+  document.addEventListener('click', function(e) {
+    if (panel && panel.classList.contains('open') && !panel.contains(e.target)) closePanel();
+  });
+  async function refreshBadge() {
+    try {
+      var r = await fetch('/api/notifications?limit=1');
+      if (!r.ok) return;
+      var j = await r.json();
+      document.querySelectorAll('[data-unread]').forEach(function(el) {
+        el.textContent = j.unread > 99 ? '99+' : j.unread;
+        el.classList.toggle('hide', !j.unread);
+      });
+    } catch (e) {}
+  }
+  async function loadNotif() {
+    var list = document.getElementById('notifList');
+    try {
+      var r = await fetch('/api/notifications?limit=8');
+      var j = await r.json();
+      if (!j.items.length) { list.innerHTML = '<div class="np-item"><span class="m">Belum ada notifikasi.</span></div>'; return; }
+      list.innerHTML = '';
+      j.items.forEach(function(n) {
+        var d = document.createElement('div');
+        d.className = 'np-item ' + (n.read ? '' : 'unread') + ' ' + (n.level || '');
+        var t = document.createElement('div'); t.className = 't'; t.textContent = n.title;
+        var m = document.createElement('div'); m.className = 'm';
+        m.textContent = (n.device_name ? n.device_name + ' — ' : '') + (n.message || '');
+        var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = n.ts;
+        d.append(t, m, ts);
+        d.addEventListener('click', function() {
+          fetch('/api/notifications/read', {method: 'POST'}).then(refreshBadge);
+          d.classList.remove('unread');
+        });
+        list.appendChild(d);
+      });
+    } catch (e) {
+      list.innerHTML = '<div class="np-item"><span class="m">Gagal memuat.</span></div>';
+    }
+  }
+  setInterval(refreshBadge, 15000);
+  refreshBadge();
 })();
 </script>
 {% block scripts %}{% endblock %}

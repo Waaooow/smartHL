@@ -28,20 +28,65 @@ def ensure_schema():
         ts DATETIME DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_tel_dev_ts ON telemetry(device_id, ts)")
-    try:
-        conn.execute("ALTER TABLE devices ADD COLUMN mqtt_id TEXT")
-    except Exception:
-        pass
-    try:
-        conn.execute("ALTER TABLE devices ADD COLUMN token TEXT")
-    except Exception:
-        pass
-    try:
-        conn.execute("ALTER TABLE devices ADD COLUMN last_seen DATETIME")
-    except Exception:
-        pass
+    conn.execute("""CREATE TABLE IF NOT EXISTS device_functions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'sensor',
+        unit TEXT DEFAULT '',
+        pin TEXT DEFAULT '',
+        sort INTEGER DEFAULT 0
+    )""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_func_dev_key ON device_functions(device_id, key)")
+    for col in ["mqtt_id TEXT", "token TEXT", "last_seen DATETIME"]:
+        try:
+            conn.execute(f"ALTER TABLE devices ADD COLUMN {col}")
+        except Exception:
+            pass
+    for col in ["alert_above REAL", "alert_below REAL"]:
+        try:
+            conn.execute(f"ALTER TABLE device_functions ADD COLUMN {col}")
+        except Exception:
+            pass
+    conn.execute("""CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER,
+        key TEXT DEFAULT '',
+        title TEXT NOT NULL,
+        message TEXT DEFAULT '',
+        level TEXT DEFAULT 'info',
+        read INTEGER DEFAULT 0,
+        ts DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_notif_read_ts ON notifications(read, ts)")
     conn.commit()
     conn.close()
+
+def check_alerts(conn, dev_id, readings: dict):
+    funcs = conn.execute(
+        "SELECT key, label, alert_above, alert_below FROM device_functions WHERE device_id=?",
+        (dev_id,)).fetchall()
+    for f in funcs:
+        if f["key"] not in readings:
+            continue
+        v = readings[f["key"]]
+        hit = None
+        if f["alert_above"] is not None and v > f["alert_above"]:
+            hit = f"melewati batas atas {f['alert_above']}"
+        elif f["alert_below"] is not None and v < f["alert_below"]:
+            hit = f"di bawah batas {f['alert_below']}"
+        if not hit:
+            continue
+        recent = conn.execute(
+            """SELECT id FROM notifications WHERE device_id=? AND key=?
+               AND ts > datetime('now','-15 minutes') LIMIT 1""",
+            (dev_id, f["key"])).fetchone()
+        if recent:
+            continue
+        conn.execute(
+            "INSERT INTO notifications (device_id, key, title, message, level) VALUES (?,?,?,?,?)",
+            (dev_id, f["key"], f"{f['label']}: {v}", f"Nilai {v} {hit}", "warning"))
 
 def handle_telemetry(mqtt_id, payload: dict):
     conn = db()
@@ -51,6 +96,7 @@ def handle_telemetry(mqtt_id, payload: dict):
         return
     dev_id = row["id"]
     now = datetime.datetime.now().isoformat(sep=" ", timespec="seconds")
+    readings = {}
     for k, v in payload.items():
         if not isinstance(k, str) or not k.replace("_", "").isalnum() or len(k) > 24:
             continue
@@ -60,6 +106,8 @@ def handle_telemetry(mqtt_id, payload: dict):
             continue
         conn.execute("INSERT INTO telemetry (device_id, key, value) VALUES (?,?,?)",
                      (dev_id, k.lower(), fv))
+        readings[k.lower()] = fv
+    check_alerts(conn, dev_id, readings)
     conn.execute("UPDATE devices SET status='Online', last_seen=? WHERE id=?", (now, dev_id))
     conn.commit()
     conn.close()

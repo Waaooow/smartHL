@@ -1,0 +1,32 @@
+{% set active = 'profile' %}
+{% extends 'layout.html' %}
+{% block title %}Profil{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Profil</h1>
+    <p>Nama tampilan &amp; password akun ini.</p>
+</div>
+<div class="card" style="max-width:480px;">
+    <form action="{{ url_for('profile_update') }}" method="POST">
+        <div class="input-group">
+            <label>Username (tidak bisa diubah)</label>
+            <input type="text" value="{{ user.username }}" disabled>
+        </div>
+        <div class="input-group">
+            <label>Nama tampilan</label>
+            <input type="text" name="display_name" value="{{ user.display_name or user.username }}" required>
+        </div>
+        <hr style="border:none; border-top:1px solid rgba(255,255,255,.15); margin:20px 0;">
+        <p style="font-size:.8rem; opacity:.7; margin-bottom:12px;">Kosongkan password bila tidak ingin mengganti.</p>
+        <div class="input-group">
+            <label>Password lama</label>
+            <input type="password" name="current_password" placeholder="••••••">
+        </div>
+        <div class="input-group">
+            <label>Password baru (min. 4 karakter)</label>
+            <input type="password" name="new_password" placeholder="••••••">
+        </div>
+        <button class="btn-submit" type="submit">SIMPAN</button>
+    </form>
+</div>
+{% endblock %}

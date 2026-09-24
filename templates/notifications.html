@@ -1,0 +1,33 @@
+{% set active = 'notifications' %}
+{% extends 'layout.html' %}
+{% block title %}Notifikasi{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Notifikasi</h1>
+    <p>Alert sensor &amp; kejadian sistem. Ke depan: smoke, movement, ambang.</p>
+</div>
+<div class="card">
+    <form action="{{ url_for('notifications_read') }}" method="POST" style="margin-bottom:15px;">
+        <button class="btn" type="submit"><i class="fas fa-check-double"></i> Tandai semua dibaca</button>
+    </form>
+    {% if not items %}
+    <p style="opacity:.7;">Belum ada notifikasi. Set ambang alert di halaman device (kolom “alert jika &gt;/&lt;”).</p>
+    {% endif %}
+    <div class="table-wrap">
+        <table class="data stack">
+            <thead><tr><th>Waktu</th><th>Device</th><th>Judul</th><th>Detail</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for n in items %}
+                <tr {% if not n.read %}style="background:rgba(255,255,255,.06);"{% endif %}>
+                    <td data-label="Waktu">{{ n.ts }}</td>
+                    <td data-label="Device">{{ n.device_name or '—' }}</td>
+                    <td data-label="Judul"><b style="color:{% if n.level=='critical' %}#ff6b81{% elif n.level=='warning' %}#ffd166{% else %}#fff{% endif %};">{{ n.title }}</b></td>
+                    <td data-label="Detail">{{ n.message }}</td>
+                    <td data-label="Status">{% if n.read %}dibaca{% else %}<b>baru</b>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

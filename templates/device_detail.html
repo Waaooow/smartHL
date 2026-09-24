@@ -12,13 +12,6 @@
     </p>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}{% for category, message in messages %}
-    <div class="alert"><i class="fas fa-info-circle"></i> {{ message }}</div>
-  {% endfor %}{% endif %}
-{% endwith %}
-<div id="live-flash"></div>
-
 {% set sensors = funcs | selectattr('kind','equalto','sensor') | list %}
 {% set ctrls = funcs | rejectattr('kind','equalto','sensor') | list %}
 
@@ -93,15 +86,20 @@
         </select>
         <input name="unit" placeholder="unit, cth: °C" style="width:90px;">
         <input name="pin" placeholder="pin, cth: GPIO5" style="width:110px;">
+        <input name="alert_above" placeholder="alert jika > (cth: 40)" style="width:140px;">
+        <input name="alert_below" placeholder="alert jika < (cth: 10)" style="width:140px;">
         <button class="btn" type="submit">Tambah</button>
     </form>
+    <p style="font-size:.75rem; color:rgba(255,255,255,.6); margin-top:8px;">
+        Ambang alert untuk sensor (smoke, suhu, gerak). Melewati ambang → masuk Notifikasi (cooldown 15 mnt).
+    </p>
 </div>
 
 <div class="card">
     <h3 style="margin-bottom:12px;"><i class="fas fa-list"></i> Semua fungsi ({{ funcs|length }})</h3>
     <div class="table-wrap">
         <table class="data stack">
-            <thead><tr><th>Key</th><th>Label</th><th>Kind</th><th>Unit/Pin</th><th>Nilai terakhir</th><th></th></tr></thead>
+            <thead><tr><th>Key</th><th>Label</th><th>Kind</th><th>Unit/Pin</th><th>Alert</th><th>Nilai terakhir</th><th></th></tr></thead>
             <tbody>
                 {% for f in funcs %}
                 <tr>
@@ -109,6 +107,7 @@
                     <td data-label="Label">{{ f.label }}</td>
                     <td data-label="Kind">{{ f.kind }}</td>
                     <td data-label="Unit/Pin">{{ f.unit }} {{ f.pin }}</td>
+                    <td data-label="Alert">{% if f.alert_above is not none and f.alert_above != '' %}&gt;{{ f.alert_above }} {% endif %}{% if f.alert_below is not none and f.alert_below != '' %}&lt;{{ f.alert_below }}{% endif %}{% if (f.alert_above is none or f.alert_above == '') and (f.alert_below is none or f.alert_below == '') %}—{% endif %}</td>
                     <td data-label="Terakhir">{% if f.key in vals %}{{ vals[f.key].value }} <span style="opacity:.6;">({{ vals[f.key].ts }})</span>{% else %}—{% endif %}</td>
                     <td data-label="Aksi"><a class="btn danger" href="{{ url_for('delete_function', fid=f.id) }}" onclick="return confirm('Hapus fungsi {{ f.key }}?')"><i class="fas fa-trash"></i></a></td>
                 </tr>
@@ -142,15 +141,7 @@
     box.form.value.value = box.checked ? 1 : 0;
     box.form.requestSubmit();
   };
-  function flashMsg(txt, ok) {
-    var box = document.getElementById('live-flash');
-    var d = document.createElement('div');
-    d.className = 'alert';
-    d.style.borderColor = ok ? 'rgba(76,209,55,.5)' : 'rgba(255,71,87,.5)';
-    d.textContent = txt;
-    box.prepend(d);
-    setTimeout(function(){ d.remove(); }, 4000);
-  }
+  function flashMsg(txt, ok) { window.showToast(txt, ok); }
   function applyVal(key, raw) {
     var num = parseFloat(raw);
     document.querySelectorAll('[data-val-for="' + key + '"]').forEach(function(el) {
