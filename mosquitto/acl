@@ -1,0 +1,6 @@
+# Contoh ACL prod (nonaktif di prototype).
+# user per-device: pattern read/write dibatasi ke mqtt_id miliknya.
+# pattern readwrite smarthl/%u/up/#
+# pattern read smarthl/%u/down/#
+# user admin-dashboard
+# pattern readwrite smarthl/#

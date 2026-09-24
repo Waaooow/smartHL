@@ -1,0 +1,25 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # MQTT native (ESP32) - JANGAN lewat Cloudflare proxy, pakai DNS-only
+      - "9001:9001"   # WebSocket (dashboard web)
+      # - "8883:8883" # aktifkan setelah TLS diset
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosq-data:/mosquitto/data
+      - ./mosquitto/mosquitto.log:/mosquitto/log/mosquitto.log
+  app:
+    image: python:3.13-slim
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "5000:5000"   # di prod taruh di belakang nginx + TLS, contoh: https://iot.alfins.my.id (Cloudflare proxy ON)
+    command: bash -c "pip install -r requirements.txt && python app.py"
+    depends_on:
+      - mosquitto
+volumes:
+  mosq-data:
