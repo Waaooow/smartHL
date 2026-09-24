@@ -3,23 +3,38 @@ services:
     image: eclipse-mosquitto:2.0
     restart: unless-stopped
     ports:
-      - "1883:1883"   # MQTT native (ESP32) - JANGAN lewat Cloudflare proxy, pakai DNS-only
-      - "9001:9001"   # WebSocket (dashboard web)
-      # - "8883:8883" # aktifkan setelah TLS diset
+      # MQTT native (ESP32/ESP8266). JANGAN lewat Cloudflare proxy (orange cloud),
+      # pakai DNS-only (grey cloud) AAAA langsung ke IPv6 server.
+      - "${MQTT_PORT:-1883}:1883"
+      # WebSocket, untuk dashboard web / mqtt.js nanti.
+      - "${MQTT_WS_PORT:-9001}:9001"
+      # - "8883:8883"  # aktifkan setelah TLS diset di mosquitto.conf
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
       - mosq-data:/mosquitto/data
-      - ./mosquitto/mosquitto.log:/mosquitto/log/mosquitto.log
+      - mosq-log:/mosquitto/log
+
   app:
-    image: python:3.13-slim
+    build: .
     restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - .:/app
     ports:
-      - "5000:5000"   # di prod taruh di belakang nginx + TLS, contoh: https://iot.alfins.my.id (Cloudflare proxy ON)
-    command: bash -c "pip install -r requirements.txt && python app.py"
+      # Di prod taruh di belakang reverse-proxy + TLS, cth:
+      # https://iot.alfins.my.id (Cloudflare proxy ON) -> 127.0.0.1:5000
+      - "127.0.0.1:${APP_PORT:-5000}:5000"
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      DB_PATH: /data/database.db
+      RUN_BRIDGE: 1
+      SECRET_KEY: ${SECRET_KEY:?isi SECRET_KEY di file .env dulu}
+    volumes:
+      # SQLite persisten di luar container (aman dari recreate).
+      - smarthl-data:/data
     depends_on:
       - mosquitto
+
 volumes:
   mosq-data:
+  mosq-log:
+  smarthl-data:

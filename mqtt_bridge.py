@@ -4,13 +4,14 @@ Tulis ke tabel telemetry + update devices.status/last_seen.
 Jalan bareng app.py (thread) atau standalone: python3 mqtt_bridge.py
 """
 import json
+import os
 import sqlite3
 import datetime
 import paho.mqtt.client as mqtt
 
-BROKER_HOST = "127.0.0.1"
-BROKER_PORT = 1883
-DB_PATH = "database.db"
+BROKER_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
+BROKER_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+DB_PATH = os.environ.get("DB_PATH", "database.db")
 
 def db():
     conn = sqlite3.connect(DB_PATH)

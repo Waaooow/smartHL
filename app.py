@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+import os
 import sqlite3
 import secrets
 import json
@@ -8,8 +9,9 @@ from ping3 import ping
 
 import paho.mqtt.client as mqtt
 
-MQTT_HOST = "127.0.0.1"
-MQTT_PORT = 1883
+MQTT_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
+MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+DB_PATH = os.environ.get("DB_PATH", "database.db")
 
 _mqtt_client = None
 
@@ -64,10 +66,12 @@ def latest_values(conn, device_id, keys):
     return out
 
 app = Flask(__name__)
-app.secret_key = 'smarthl_secret_key'
+app.secret_key = os.environ.get("SECRET_KEY", "smarthl_secret_key")
+if app.secret_key == "smarthl_secret_key":
+    print("[smarthl] WARNING: memakai SECRET_KEY default (ok untuk lokal, ganti di prod)", flush=True)
 
 def get_db_connection():
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -425,3 +429,9 @@ if __name__ == '__main__':
     init_db()
     _start_bridge_thread()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+# Dipakai saat dijalankan via WSGI prod (gunicorn di container):
+# gunicorn tidak mengeksekusi blok __main__, jadi bridge+skema di-trigger env.
+if os.environ.get("RUN_BRIDGE") == "1" and not os.environ.get("WERKZEUG_RUN_MAIN"):
+    init_db()
+    _start_bridge_thread()
