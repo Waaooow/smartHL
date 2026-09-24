@@ -51,14 +51,14 @@ def handle_telemetry(mqtt_id, payload: dict):
     dev_id = row["id"]
     now = datetime.datetime.now().isoformat(sep=" ", timespec="seconds")
     for k, v in payload.items():
+        if not isinstance(k, str) or not k.replace("_", "").isalnum() or len(k) > 24:
+            continue
         try:
             fv = float(v)
         except (TypeError, ValueError):
             continue
-        if k not in ("temp", "hum", "led", "rssi"):
-            continue
         conn.execute("INSERT INTO telemetry (device_id, key, value) VALUES (?,?,?)",
-                     (dev_id, k, fv))
+                     (dev_id, k.lower(), fv))
     conn.execute("UPDATE devices SET status='Online', last_seen=? WHERE id=?", (now, dev_id))
     conn.commit()
     conn.close()
@@ -92,7 +92,10 @@ def on_message(client, userdata, msg):
 
 def main():
     ensure_schema()
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="smarthl-bridge")
+    import os
+    import uuid
+    cid = f"smarthl-bridge-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
     client.on_connect = on_connect
     client.on_message = on_message
     try:

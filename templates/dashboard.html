@@ -238,9 +238,8 @@
         <h2>smart<span>HL</span></h2>
         <ul class="nav-menu">
             <a href="{{ url_for('dashboard') }}" class="nav-item active"><i class="fas fa-home"></i> Dashboard</a>
-            <a href="#" class="nav-item"><i class="fas fa-lightbulb"></i> Lampu</a>
-            <a href="#" class="nav-item"><i class="fas fa-thermometer-half"></i> Sensor</a>
-            <a href="#" class="nav-item"><i class="fas fa-cog"></i> Pengaturan</a>
+            <a href="{{ url_for('devices_page') }}" class="nav-item"><i class="fas fa-microchip"></i> Perangkat</a>
+            <a href="{{ url_for('kontrol_page') }}" class="nav-item"><i class="fas fa-sliders-h"></i> Kontrol</a>
             <a href="/logout" class="nav-item" style="margin-top: auto;"><i class="fas fa-sign-out-alt"></i> Keluar</a>
         </ul>
     </div>
@@ -285,7 +284,7 @@
                         <i class="fas fa-trash-alt"></i>
                     </a>
                 </div>
-                <div class="card-value">{{ device.name }}</div>
+                <div class="card-value"><a href="{{ url_for('device_detail', id=device.id) }}" style="color:white; text-decoration:none;">{{ device.name }}</a></div>
                 
                 <div class="card-label">
                     Status: <span style="color: {% if device.status == 'Online' %}#4cd137{% else %}#ff4757{% endif %}; font-weight: bold;">{{ device.status }}</span>
@@ -306,6 +305,7 @@
                 <div class="card-label" style="opacity:.7">Belum ada telemetri (jalankan sim_device.py)</div>
                 {% endif %}
                 <div style="margin-top:12px; display:flex; gap:8px;">
+                    <a href="{{ url_for('device_detail', id=device.id) }}" class="btn-add" style="text-decoration:none; padding:8px 14px; font-size:.8rem;">BUKA <i class="fas fa-arrow-right"></i></a>
                     <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
                         <input type="hidden" name="led" value="1">
                         <button class="btn-add" style="padding:8px 14px; font-size:.8rem;">LED ON</button>
@@ -314,7 +314,6 @@
                         <input type="hidden" name="led" value="0">
                         <button class="btn-add" style="padding:8px 14px; font-size:.8rem; background:rgba(255,71,87,.3);">LED OFF</button>
                     </form>
-                    <a href="{{ url_for('device_detail', id=device.id) }}" style="color:#fff; font-size:.8rem; align-self:center;">JSON</a>
                 </div>
                 {% endif %}
 

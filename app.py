@@ -16,11 +16,52 @@ _mqtt_client = None
 def mqtt_pub(topic, payload: dict):
     global _mqtt_client
     if _mqtt_client is None:
-        c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="smarthl-web")
+        import uuid
+        c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                        client_id=f"smarthl-web-{uuid.uuid4().hex[:6]}")
         c.connect(MQTT_HOST, MQTT_PORT, 60)
         c.loop_start()
         _mqtt_client = c
     _mqtt_client.publish(topic, json.dumps(payload))
+
+# Kinds fungsi device. sensor = tampil saja, sisanya kirim perintah MQTT.
+FUNC_KINDS = ("sensor", "toggle", "button", "slider")
+
+DEFAULT_FUNCS = [
+    ("temp", "Suhu", "sensor", "°C", "", 1),
+    ("hum", "Kelembaban", "sensor", "%", "", 2),
+    ("rssi", "Sinyal WiFi", "sensor", "dBm", "", 3),
+    ("led", "LED Built-in", "toggle", "", "GPIO2", 4),
+]
+
+def ensure_functions(conn, device):
+    """Seed fungsi standar untuk device MQTT yang belum punya fungsi."""
+    if not device["mqtt_id"]:
+        return []
+    rows = conn.execute(
+        "SELECT * FROM device_functions WHERE device_id=? ORDER BY sort",
+        (device["id"],)).fetchall()
+    if rows:
+        return rows
+    for key, label, kind, unit, pin, sort in DEFAULT_FUNCS:
+        conn.execute(
+            "INSERT INTO device_functions (device_id, key, label, kind, unit, pin, sort)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (device["id"], key, label, kind, unit, pin, sort))
+    conn.commit()
+    return conn.execute(
+        "SELECT * FROM device_functions WHERE device_id=? ORDER BY sort",
+        (device["id"],)).fetchall()
+
+def latest_values(conn, device_id, keys):
+    out = {}
+    for k in keys:
+        r = conn.execute(
+            "SELECT value, ts FROM telemetry WHERE device_id=? AND key=? ORDER BY ts DESC LIMIT 1",
+            (device_id, k)).fetchone()
+        if r:
+            out[k] = {"value": r["value"], "ts": r["ts"]}
+    return out
 
 app = Flask(__name__)
 app.secret_key = 'smarthl_secret_key'
@@ -55,6 +96,17 @@ def init_db():
         ts DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_tel_dev_ts ON telemetry(device_id, ts)')
+    conn.execute('''CREATE TABLE IF NOT EXISTS device_functions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'sensor',
+        unit TEXT DEFAULT '',
+        pin TEXT DEFAULT '',
+        sort INTEGER DEFAULT 0
+    )''')
+    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_func_dev_key ON device_functions(device_id, key)')
     for col in ['mqtt_id TEXT', 'token TEXT', 'last_seen DATETIME']:
         try:
             conn.execute(f'ALTER TABLE devices ADD COLUMN {col}')
@@ -152,6 +204,8 @@ def wake_device(id):
 @app.route('/delete_device/<int:id>')
 def delete_device(id):
     conn = get_db_connection()
+    conn.execute('DELETE FROM device_functions WHERE device_id=?', (id,))
+    conn.execute('DELETE FROM telemetry WHERE device_id=?', (id,))
     conn.execute('DELETE FROM devices WHERE id = ?', (id,))
     conn.commit()
     conn.close()
@@ -177,6 +231,25 @@ def device_cmd(id):
 
 @app.route('/device/<int:id>')
 def device_detail(id):
+    """Halaman per-device: sensor + kontrol (render dari device_functions) + kelola fungsi."""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    device = conn.execute('SELECT * FROM devices WHERE id=?', (id,)).fetchone()
+    if not device:
+        conn.close()
+        return redirect(url_for('dashboard'))
+    device = dict(device)
+    funcs = [dict(r) for r in ensure_functions(conn, device)]
+    vals = latest_values(conn, id, [f["key"] for f in funcs])
+    hist = [dict(r) for r in conn.execute(
+        "SELECT key, value, ts FROM telemetry WHERE device_id=? ORDER BY ts DESC LIMIT 60",
+        (id,)).fetchall()]
+    conn.close()
+    return render_template('device_detail.html', device=device, funcs=funcs, vals=vals, hist=hist)
+
+@app.route('/device/<int:id>/data')
+def device_data(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
@@ -186,8 +259,100 @@ def device_detail(id):
         (id,)).fetchall()
     conn.close()
     if not device:
-        return redirect(url_for('dashboard'))
+        return jsonify({"error": "not found"}), 404
     return jsonify({"device": dict(device), "telemetry": [dict(r) for r in rows]})
+
+@app.route('/device/<int:id>/action', methods=['POST'])
+def device_action(id):
+    """Aksi generik: kirim {key: value} ke smarthl/{mqtt_id}/down/cmd."""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    device = conn.execute('SELECT * FROM devices WHERE id=?', (id,)).fetchone()
+    conn.close()
+    if not device or not device['mqtt_id']:
+        flash('Device belum punya MQTT ID', 'error')
+        return redirect(url_for('dashboard'))
+    key = (request.form.get('key') or '').strip().lower()
+    raw = request.form.get('value', '0')
+    if not key or not key.replace('_', '').isalnum():
+        flash('Key fungsi tidak valid', 'error')
+        return redirect(url_for('device_detail', id=id))
+    try:
+        value = float(raw)
+    except ValueError:
+        flash('Value harus angka', 'error')
+        return redirect(url_for('device_detail', id=id))
+    try:
+        mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {key: value})
+        flash(f"Terkirim ke {device['name']}: {key}={raw}", 'success')
+    except Exception as e:
+        flash(f"Gagal kirim MQTT: {e}", 'error')
+    return redirect(request.form.get('next') or url_for('device_detail', id=id))
+
+@app.route('/device/<int:id>/functions', methods=['POST'])
+def add_function(id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    key = (request.form.get('key') or '').strip().lower()
+    label = (request.form.get('label') or key).strip()
+    kind = request.form.get('kind', 'sensor')
+    unit = (request.form.get('unit') or '').strip()
+    pin = (request.form.get('pin') or '').strip()
+    if kind not in FUNC_KINDS or not key or not key.replace('_', '').isalnum():
+        flash('Fungsi tidak valid (key alfanumerik, kind: sensor/toggle/button/slider)', 'error')
+        return redirect(url_for('device_detail', id=id))
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO device_functions (device_id, key, label, kind, unit, pin, sort)"
+            " VALUES (?,?,?,?,?,?,COALESCE((SELECT MAX(sort)+1 FROM device_functions WHERE device_id=?),1))",
+            (id, key, label, kind, unit, pin, id))
+        conn.commit()
+        flash(f"Fungsi {label} ditambah", 'success')
+    except Exception:
+        flash(f"Key '{key}' sudah ada di device ini", 'error')
+    conn.close()
+    return redirect(url_for('device_detail', id=id))
+
+@app.route('/functions/<int:fid>/delete')
+def delete_function(fid):
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    r = conn.execute('SELECT device_id FROM device_functions WHERE id=?', (fid,)).fetchone()
+    if r:
+        conn.execute('DELETE FROM device_functions WHERE id=?', (fid,))
+        conn.commit()
+    conn.close()
+    return redirect(url_for('device_detail', id=r['device_id']) if r else url_for('dashboard'))
+
+@app.route('/devices')
+def devices_page():
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    rows = conn.execute('SELECT * FROM devices ORDER BY id').fetchall()
+    devices = [dict(r) for r in rows]
+    conn.close()
+    return render_template('devices.html', devices=devices)
+
+@app.route('/kontrol')
+def kontrol_page():
+    """Satu halaman berisi SEMUA kontrol (toggle/button/slider) dari semua device."""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    devices = [dict(r) for r in conn.execute('SELECT * FROM devices ORDER BY id').fetchall()]
+    groups = []
+    for d in devices:
+        funcs = [dict(r) for r in ensure_functions(conn, d)]
+        ctrls = [f for f in funcs if f["kind"] in ("toggle", "button", "slider")]
+        if ctrls:
+            groups.append({"device": d, "funcs": ctrls,
+                           "vals": latest_values(conn, d["id"], [f["key"] for f in ctrls])})
+    conn.close()
+    return render_template('kontrol.html', groups=groups)
 
 @app.route('/api/telemetry', methods=['POST'])
 def api_telemetry():
@@ -202,13 +367,14 @@ def api_telemetry():
     if not device or device['token'] != token:
         conn.close()
         return jsonify({"error": "unauthorized"}), 401
-    for k in ("temp", "hum", "led", "rssi"):
-        if k in data:
-            try:
-                conn.execute("INSERT INTO telemetry (device_id, key, value) VALUES (?,?,?)",
-                             (device['id'], k, float(data[k])))
-            except (TypeError, ValueError):
-                pass
+    for k, v in data.items():
+        if k == "mqtt_id" or not k.replace("_", "").isalnum() or len(k) > 24:
+            continue
+        try:
+            conn.execute("INSERT INTO telemetry (device_id, key, value) VALUES (?,?,?)",
+                         (device['id'], k.lower(), float(v)))
+        except (TypeError, ValueError):
+            pass
     conn.execute("UPDATE devices SET status='Online', last_seen=CURRENT_TIMESTAMP WHERE id=?",
                  (device['id'],))
     conn.commit()

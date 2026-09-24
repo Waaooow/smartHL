@@ -28,8 +28,8 @@ TOP_UP = f"smarthl/{MQTT_ID}/up/telemetry"
 TOP_DOWN = f"smarthl/{MQTT_ID}/down/cmd"
 TOP_STATUS = f"smarthl/{MQTT_ID}/up/status"
 
-# --- state hardware virtual ---
-LED_GPIO2 = 0
+# --- state hardware virtual (output generik: key apa pun bisa dikontrol) ---
+outputs = {"led": 0}
 _wifi_connected = False
 
 
@@ -52,14 +52,15 @@ def on_connect(client, userdata, flags, rc, props=None):
 
 
 def on_message(client, userdata, msg):
-    global LED_GPIO2
     payload = msg.payload.decode(errors="ignore")
     Serial_println(f"Message arrived [{msg.topic}]: {payload}")
     try:
         cmd = json.loads(payload)
-        if "led" in cmd:
-            LED_GPIO2 = 1 if int(cmd["led"]) else 0
-            Serial_println(f"digitalWrite(LED_BUILTIN, {LED_GPIO2})")
+        for k, v in cmd.items():
+            key = str(k).lower()
+            if key.replace("_", "").isalnum():
+                outputs[key] = int(float(v))
+                Serial_println(f"digitalWrite({key}, {outputs[key]})")
     except Exception as e:
         Serial_println(f"bad cmd: {e}")
 
@@ -72,7 +73,8 @@ def dht22_read():
 def loop(client):
     temp, hum = dht22_read()
     rssi = random.randint(-80, -45)
-    payload = {"temp": temp, "hum": hum, "led": LED_GPIO2, "rssi": rssi}
+    payload = {"temp": temp, "hum": hum, "rssi": rssi}
+    payload.update(outputs)
     client.publish(TOP_UP, json.dumps(payload))
     Serial_println(f"publish {TOP_UP}: {json.dumps(payload)}")
     time.sleep(5)
