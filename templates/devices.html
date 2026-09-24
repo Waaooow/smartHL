@@ -1,56 +1,30 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>smartHL - Perangkat</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',sans-serif; }
-        body { min-height:100vh; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); display:flex; color:white; }
-        .sidebar { width:250px; background:rgba(255,255,255,.1); backdrop-filter:blur(15px); border-right:1px solid rgba(255,255,255,.1); padding:30px 20px; display:flex; flex-direction:column; }
-        .sidebar h2 { font-size:1.5rem; margin-bottom:40px; text-align:center; letter-spacing:2px; }
-        .sidebar h2 span { font-weight:300; }
-        .nav-menu { list-style:none; }
-        .nav-item { padding:15px; margin-bottom:10px; border-radius:10px; display:flex; align-items:center; text-decoration:none; color:white; }
-        .nav-item i { margin-right:15px; width:20px; }
-        .nav-item:hover, .nav-item.active { background:rgba(255,255,255,.2); }
-        .main-content { flex:1; padding:40px; overflow-y:auto; }
-        .card { background:rgba(255,255,255,.1); backdrop-filter:blur(10px); padding:25px; border-radius:20px; border:1px solid rgba(255,255,255,.1); }
-        table { width:100%; border-collapse:collapse; font-size:.9rem; }
-        th, td { text-align:left; padding:10px; border-bottom:1px solid rgba(255,255,255,.15); }
-        a { color:white; }
-        @media (max-width:768px){ body{flex-direction:column;} .sidebar{width:100%;} }
-    </style>
-</head>
-<body>
-    <div class="sidebar">
-        <h2>smart<span>HL</span></h2>
-        <ul class="nav-menu">
-            <a href="{{ url_for('dashboard') }}" class="nav-item"><i class="fas fa-home"></i> Dashboard</a>
-            <a href="{{ url_for('devices_page') }}" class="nav-item active"><i class="fas fa-microchip"></i> Perangkat</a>
-            <a href="{{ url_for('kontrol_page') }}" class="nav-item"><i class="fas fa-sliders-h"></i> Kontrol</a>
-            <a href="/logout" class="nav-item" style="margin-top:auto;"><i class="fas fa-sign-out-alt"></i> Keluar</a>
-        </ul>
-    </div>
-    <div class="main-content">
-        <h1 style="margin-bottom:5px;">Perangkat</h1>
-        <p style="color:rgba(255,255,255,.7); margin-bottom:25px;">Kelola semua device. Tambah baru lewat tombol di Dashboard. Klik nama untuk atur fungsi & kontrol.</p>
-        <div class="card">
-            <table>
+{% set active = 'devices' %}
+{% extends 'layout.html' %}
+{% block title %}Perangkat{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Perangkat</h1>
+    <p>Kelola semua device. Tambah baru lewat tombol di Dashboard. Klik nama untuk atur fungsi &amp; kontrol.</p>
+</div>
+<div class="card">
+    <div class="table-wrap">
+        <table class="data stack">
+            <thead>
                 <tr><th>Nama</th><th>Tipe</th><th>Status</th><th>MQTT ID</th><th>Token</th><th></th></tr>
+            </thead>
+            <tbody>
                 {% for d in devices %}
                 <tr>
-                    <td><a href="{{ url_for('device_detail', id=d.id) }}"><b>{{ d.name }}</b></a></td>
-                    <td>{{ d.type }}</td>
-                    <td>{{ d.status }}</td>
-                    <td>{% if d.mqtt_id %}<code>smarthl/{{ d.mqtt_id }}/#</code>{% else %}—{% endif %}</td>
-                    <td>{% if d.token %}<code>{{ d.token }}</code>{% else %}—{% endif %}</td>
-                    <td><a href="{{ url_for('delete_device', id=d.id) }}" onclick="return confirm('Hapus {{ d.name }} + semua data?')" style="opacity:.6;"><i class="fas fa-trash"></i></a></td>
+                    <td data-label="Nama"><a href="{{ url_for('device_detail', id=d.id) }}"><b>{{ d.name }}</b></a></td>
+                    <td data-label="Tipe">{{ d.type }}</td>
+                    <td data-label="Status">{{ d.status }}</td>
+                    <td data-label="MQTT ID">{% if d.mqtt_id %}<code>smarthl/{{ d.mqtt_id }}/#</code>{% else %}—{% endif %}</td>
+                    <td data-label="Token">{% if d.token %}<code>{{ d.token }}</code>{% else %}—{% endif %}</td>
+                    <td data-label="Aksi"><a class="btn danger" href="{{ url_for('delete_device', id=d.id) }}" onclick="return confirm('Hapus {{ d.name }} + semua data?')"><i class="fas fa-trash"></i></a></td>
                 </tr>
                 {% endfor %}
-            </table>
-        </div>
+            </tbody>
+        </table>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}

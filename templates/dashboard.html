@@ -1,393 +1,140 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>smartHL - Dashboard</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* --- RESET & BASE --- */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', sans-serif;
-        }
+{% set active = 'dashboard' %}
+{% extends 'layout.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Halo, Admin!</h1>
+    <p>Monitoring sistem SmartHome anda.</p>
+</div>
 
-        body {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            color: white;
-            overflow-x: hidden;
-        }
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">
+        <i class="fas fa-info-circle"></i> {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
 
-        /* --- SIDEBAR --- */
-        .sidebar {
-            width: 250px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 30px 20px;
-            display: flex;
-            flex-direction: column;
-            transition: 0.3s;
-        }
+<div style="display:flex; justify-content:flex-end; margin-bottom:25px;">
+    <button class="btn-add" onclick="document.getElementById('addModal').style.display='flex'">
+        <i class="fas fa-plus-circle"></i>
+        <span>Tambah Perangkat</span>
+    </button>
+</div>
 
-        .sidebar h2 {
-            font-size: 1.5rem;
-            margin-bottom: 40px;
-            text-align: center;
-            letter-spacing: 2px;
-        }
+<div class="grid">
+    {% for device in devices %}
+    <div class="card" style="margin-bottom:0;">
+        <div class="card-header">
+            <i class="fas {% if device.type == 'PC' %}fa-desktop{% elif device.type == 'Lampu' %}fa-lightbulb{% elif device.type == 'Sensor' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
+            <a href="{{ url_for('delete_device', id=device.id) }}" style="color: rgba(255,255,255,0.3);" onclick="return confirm('Hapus device ini?')">
+                <i class="fas fa-trash-alt"></i>
+            </a>
+        </div>
+        <div class="card-value"><a href="{{ url_for('device_detail', id=device.id) }}" style="text-decoration:none;">{{ device.name }}</a></div>
 
-        .sidebar h2 span { font-weight: 300; }
-
-        .nav-menu { list-style: none; }
-
-        .nav-item {
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: 0.3s;
-            display: flex;
-            align-items: center;
-            text-decoration: none;
-            color: white;
-        }
-
-        .nav-item i { margin-right: 15px; width: 20px; }
-
-        .nav-item:hover, .nav-item.active {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        /* --- MAIN CONTENT --- */
-        .main-content {
-            flex: 1;
-            padding: 40px;
-            overflow-y: auto;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 40px;
-        }
-
-        /* Flash Messages styling */
-        .alert {
-            padding: 12px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            background: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            font-size: 0.9rem;
-        }
-
-        /* --- ACTION BAR & BUTTON --- */
-        .action-bar {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 25px;
-        }
-
-        .btn-add {
-            background: rgba(76, 209, 55, 0.2);
-            backdrop-filter: blur(10px);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 12px 24px;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            text-decoration: none;
-        }
-
-        .btn-add:hover {
-            background: rgba(76, 209, 55, 0.4);
-            transform: translateY(-2px);
-        }
-
-        /* --- GRID & CARDS --- */
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 25px;
-        }
-
-        .card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 25px;
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: 0.3s;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .card-header i { font-size: 1.5rem; color: #ffd700; }
-
-        .card-value { font-size: 1.5rem; font-weight: bold; margin-bottom: 5px; }
-
-        .card-label { color: rgba(255, 255, 255, 0.7); font-size: 0.8rem; margin-top: 5px;}
-
-        /* --- TOGGLE SWITCH --- */
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 24px;
-        }
-        .switch input { display: none; }
-        .slider {
-            position: absolute; cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(255, 255, 255, 0.2);
-            transition: .4s; border-radius: 34px;
-        }
-        .slider:before {
-            position: absolute; content: "";
-            height: 18px; width: 18px; left: 3px; bottom: 3px;
-            background-color: white; transition: .4s; border-radius: 50%;
-        }
-        input:checked + .slider { background-color: #4cd137; }
-        input:checked + .slider:before { transform: translateX(26px); }
-
-        /* --- MODAL STYLING --- */
-        #addModal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(8px);
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .modal-content {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 30px;
-            border-radius: 25px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
-            text-align: center;
-        }
-
-        .input-group { text-align: left; margin-bottom: 15px; }
-        .input-group label { display: block; font-size: 0.8rem; margin-bottom: 5px; color: rgba(255,255,255,0.7); }
-        
-        .input-group input, .input-group select {
-            width: 100%;
-            padding: 12px;
-            border-radius: 10px;
-            border: none;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            outline: none;
-        }
-
-        .btn-submit {
-            width: 100%;
-            padding: 12px;
-            background: white;
-            color: #764ba2;
-            border: none;
-            border-radius: 10px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-
-        /* --- RESPONSIVE --- */
-        @media (max-width: 768px) {
-            body { flex-direction: column; }
-            .sidebar { width: 100%; height: auto; padding: 15px; }
-            .action-bar { justify-content: center; }
-            .btn-add { width: 100%; justify-content: center; }
-        }
-    </style>
-</head>
-<body>
-
-    <div class="sidebar">
-        <h2>smart<span>HL</span></h2>
-        <ul class="nav-menu">
-            <a href="{{ url_for('dashboard') }}" class="nav-item active"><i class="fas fa-home"></i> Dashboard</a>
-            <a href="{{ url_for('devices_page') }}" class="nav-item"><i class="fas fa-microchip"></i> Perangkat</a>
-            <a href="{{ url_for('kontrol_page') }}" class="nav-item"><i class="fas fa-sliders-h"></i> Kontrol</a>
-            <a href="/logout" class="nav-item" style="margin-top: auto;"><i class="fas fa-sign-out-alt"></i> Keluar</a>
-        </ul>
-    </div>
-
-    <div class="main-content">
-        <header>
-            <div>
-                <h1>Halo, Admin!</h1>
-                <p style="color: rgba(255,255,255,0.7)">Monitoring sistem SmartHome anda.</p>
-            </div>
-            <div class="user-info">
-                <i class="fas fa-bell"></i>
-                <div style="width: 40px; height: 40px; background: #fff; border-radius: 50%; color: #764ba2; display: flex; align-items: center; justify-content: center;">
-                    <i class="fas fa-user"></i>
-                </div>
-            </div>
-        </header>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="alert alert-{{ category }}">
-                <i class="fas fa-info-circle"></i> {{ message }}
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        <div class="action-bar">
-            <button class="btn-add" onclick="document.getElementById('addModal').style.display='flex'">
-                <i class="fas fa-plus-circle"></i> 
-                <span>Tambah Perangkat</span>
-            </button>
+        <div class="card-label">
+            Status: <span style="color: {% if device.status == 'Online' %}#4cd137{% else %}#ff4757{% endif %}; font-weight: bold;">{{ device.status }}</span>
         </div>
 
-        <div class="dashboard-grid">
-            {% for device in devices %}
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas {% if device.type == 'PC' %}fa-desktop{% elif device.type == 'Lampu' %}fa-lightbulb{% elif device.type == 'Sensor' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
-                    <a href="{{ url_for('delete_device', id=device.id) }}" style="color: rgba(255,255,255,0.3);" onclick="return confirm('Hapus device ini?')">
-                        <i class="fas fa-trash-alt"></i>
-                    </a>
-                </div>
-                <div class="card-value"><a href="{{ url_for('device_detail', id=device.id) }}" style="color:white; text-decoration:none;">{{ device.name }}</a></div>
-                
-                <div class="card-label">
-                    Status: <span style="color: {% if device.status == 'Online' %}#4cd137{% else %}#ff4757{% endif %}; font-weight: bold;">{{ device.status }}</span>
-                </div>
-                
-                {% if device.ip_address %}
-                <div class="card-label">IP: {{ device.ip_address }}</div>
-                {% endif %}
-                {% if device.mqtt_id %}
-                <div class="card-label">MQTT: <code>smarthl/{{ device.mqtt_id }}/#</code></div>
-                {% if device.telemetry %}
-                <div class="card-label">
-                    {% if device.telemetry.temp is defined %}Temp: <b>{{ device.telemetry.temp }}°C</b> {% endif %}
-                    {% if device.telemetry.hum is defined %}Hum: <b>{{ device.telemetry.hum }}%</b> {% endif %}
-                    {% if device.telemetry.led is defined %}LED: <b>{{ device.telemetry.led }}</b> {% endif %}
-                </div>
-                {% else %}
-                <div class="card-label" style="opacity:.7">Belum ada telemetri (jalankan sim_device.py)</div>
-                {% endif %}
-                <div style="margin-top:12px; display:flex; gap:8px;">
-                    <a href="{{ url_for('device_detail', id=device.id) }}" class="btn-add" style="text-decoration:none; padding:8px 14px; font-size:.8rem;">BUKA <i class="fas fa-arrow-right"></i></a>
-                    <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
-                        <input type="hidden" name="led" value="1">
-                        <button class="btn-add" style="padding:8px 14px; font-size:.8rem;">LED ON</button>
-                    </form>
-                    <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
-                        <input type="hidden" name="led" value="0">
-                        <button class="btn-add" style="padding:8px 14px; font-size:.8rem; background:rgba(255,71,87,.3);">LED OFF</button>
-                    </form>
-                </div>
-                {% endif %}
-
-                {% if device.type == 'PC' %}
-                <div style="margin-top: 15px;">
-                    <a href="{{ url_for('wake_device', id=device.id) }}" class="btn-add" style="background: rgba(118, 75, 162, 0.4); text-decoration: none; font-size: 0.8rem; justify-content: center; padding: 10px;">
-                        <i class="fas fa-power-off"></i> Wake On LAN
-                    </a>
-                </div>
-                {% elif device.type != 'Sensor' %}
-                <div style="margin-top: 15px;">
-                    <label class="switch">
-                        <input type="checkbox" {% if device.status == 'Online' or device.status == 'On' %}checked{% endif %}>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
+        {% if device.ip_address %}
+        <div class="card-label">IP: {{ device.ip_address }}</div>
+        {% endif %}
+        {% if device.mqtt_id %}
+        <div class="card-label">MQTT: <code>smarthl/{{ device.mqtt_id }}/#</code></div>
+        {% if device.telemetry %}
+        <div class="card-label">
+            {% if device.telemetry.temp is defined %}Temp: <b>{{ device.telemetry.temp }}°C</b> {% endif %}
+            {% if device.telemetry.hum is defined %}Hum: <b>{{ device.telemetry.hum }}%</b> {% endif %}
+            {% if device.telemetry.led is defined %}LED: <b>{{ device.telemetry.led }}</b> {% endif %}
         </div>
-    </div>
-
-    <div id="addModal">
-        <div class="modal-content card">
-            <h3 style="margin-bottom: 20px;">Tambah Device Baru</h3>
-            <form action="/add_device" method="POST">
-                <div class="input-group">
-                    <label>Nama Perangkat</label>
-                    <input type="text" name="name" placeholder="Misal: PC Server" required>
-                </div>
-                <div class="input-group">
-                    <label>Tipe Perangkat</label>
-                    <select name="type" id="typeSelect" onchange="togglePCFields()">
-                        <option value="Lampu">Lampu / Smart Plug (MQTT)</option>
-                        <option value="PC">Komputer (WoL & Ping)</option>
-                        <option value="Sensor">Sensor (MQTT)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>MQTT ID (kosongkan = auto, cth: shl-demo01)</label>
-                    <input type="text" name="mqtt_id" placeholder="shl-demo01">
-                </div>
-
-                <div id="pcFields" style="display: none;">
-                    <div class="input-group">
-                        <label>IP Address</label>
-                        <input type="text" name="ip_address" placeholder="192.168.1.10">
-                    </div>
-                    <div class="input-group">
-                        <label>MAC Address</label>
-                        <input type="text" name="mac_address" placeholder="AA:BB:CC:DD:EE:FF">
-                    </div>
-                    <div class="input-group">
-                        <label>Interface (Debian)</label>
-                        <input type="text" name="interface" placeholder="eth0 atau enp3s0" value="eth0">
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-submit">SIMPAN</button>
-                <button type="button" onclick="document.getElementById('addModal').style.display='none'" 
-                        style="background: transparent; color: white; border: none; margin-top: 10px; cursor: pointer; width: 100%;">
-                    BATAL
-                </button>
+        {% else %}
+        <div class="card-label" style="opacity:.7">Belum ada telemetri (jalankan sim_device.py)</div>
+        {% endif %}
+        <div class="btn-row">
+            <a href="{{ url_for('device_detail', id=device.id) }}" class="btn-add" style="padding:8px 14px; font-size:.8rem;">BUKA <i class="fas fa-arrow-right"></i></a>
+            <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
+                <input type="hidden" name="led" value="1">
+                <button class="btn-add" style="padding:8px 14px; font-size:.8rem;">LED ON</button>
+            </form>
+            <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
+                <input type="hidden" name="led" value="0">
+                <button class="btn-add" style="padding:8px 14px; font-size:.8rem; background:rgba(255,71,87,.3);">LED OFF</button>
             </form>
         </div>
+        {% endif %}
+
+        {% if device.type == 'PC' %}
+        <div style="margin-top: 15px;">
+            <a href="{{ url_for('wake_device', id=device.id) }}" class="btn-add" style="background: rgba(118, 75, 162, 0.4); font-size: 0.8rem; justify-content: center; padding: 10px; width:100%;">
+                <i class="fas fa-power-off"></i> Wake On LAN
+            </a>
+        </div>
+        {% elif device.type != 'Sensor' and not device.mqtt_id %}
+        <div style="margin-top: 15px;">
+            <label class="switch">
+                <input type="checkbox" {% if device.status == 'Online' or device.status == 'On' %}checked{% endif %}>
+                <span class="slider"></span>
+            </label>
+        </div>
+        {% endif %}
     </div>
+    {% endfor %}
+</div>
 
-    <script>
-        function togglePCFields() {
-            const select = document.getElementById('typeSelect');
-            const pcFields = document.getElementById('pcFields');
-            pcFields.style.display = (select.value === 'PC') ? 'block' : 'none';
-        }
-    </script>
+<div id="addModal">
+    <div class="modal-content card">
+        <h3 style="margin-bottom: 20px;">Tambah Device Baru</h3>
+        <form action="/add_device" method="POST">
+            <div class="input-group">
+                <label>Nama Perangkat</label>
+                <input type="text" name="name" placeholder="Misal: PC Server" required>
+            </div>
+            <div class="input-group">
+                <label>Tipe Perangkat</label>
+                <select name="type" id="typeSelect" onchange="togglePCFields()">
+                    <option value="Lampu">Lampu / Smart Plug (MQTT)</option>
+                    <option value="PC">Komputer (WoL & Ping)</option>
+                    <option value="Sensor">Sensor (MQTT)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>MQTT ID (kosongkan = auto, cth: shl-demo01)</label>
+                <input type="text" name="mqtt_id" placeholder="shl-demo01">
+            </div>
 
-</body>
-</html>
+            <div id="pcFields" style="display: none;">
+                <div class="input-group">
+                    <label>IP Address</label>
+                    <input type="text" name="ip_address" placeholder="192.168.1.10">
+                </div>
+                <div class="input-group">
+                    <label>MAC Address</label>
+                    <input type="text" name="mac_address" placeholder="AA:BB:CC:DD:EE:FF">
+                </div>
+                <div class="input-group">
+                    <label>Interface (Debian)</label>
+                    <input type="text" name="interface" placeholder="eth0 atau enp3s0" value="eth0">
+                </div>
+            </div>
+
+            <button type="submit" class="btn-submit">SIMPAN</button>
+            <button type="button" onclick="document.getElementById('addModal').style.display='none'"
+                    style="background: transparent; color: white; border: none; margin-top: 10px; cursor: pointer; width: 100%;">
+                BATAL
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    function togglePCFields() {
+        const select = document.getElementById('typeSelect');
+        const pcFields = document.getElementById('pcFields');
+        pcFields.style.display = (select.value === 'PC') ? 'block' : 'none';
+    }
+</script>
+{% endblock %}

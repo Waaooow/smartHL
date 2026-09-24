@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>smartHL - {% block title %}Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',sans-serif; }
+        body { min-height:100vh; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:white; overflow-x:hidden; }
+        a { color:white; }
+
+        /* --- Topbar (khusus mobile) --- */
+        .topbar { display:none; }
+        #navOverlay { display:none; }
+
+        /* --- Sidebar (desktop) --- */
+        .sidebar { position:fixed; top:0; left:0; width:250px; height:100vh; z-index:200;
+            background:rgba(255,255,255,.1); backdrop-filter:blur(15px);
+            border-right:1px solid rgba(255,255,255,.1); padding:30px 20px;
+            display:flex; flex-direction:column; transition:transform .25s ease; }
+        .sidebar h2 { font-size:1.5rem; margin-bottom:40px; text-align:center; letter-spacing:2px; }
+        .sidebar h2 span { font-weight:300; }
+        .nav-menu { list-style:none; }
+        .nav-item { padding:15px; margin-bottom:10px; border-radius:10px; display:flex; align-items:center; text-decoration:none; color:white; }
+        .nav-item i { margin-right:15px; width:20px; }
+        .nav-item:hover, .nav-item.active { background:rgba(255,255,255,.2); }
+
+        .main-content { margin-left:250px; padding:40px; min-height:100vh; }
+        .page-head { margin-bottom:25px; }
+        .page-head h1 { font-size:1.8rem; }
+        .page-head p { color:rgba(255,255,255,.7); }
+
+        /* --- Komponen --- */
+        .card { background:rgba(255,255,255,.1); backdrop-filter:blur(10px); padding:25px; border-radius:20px; border:1px solid rgba(255,255,255,.1); margin-bottom:25px; }
+        .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:20px; }
+        .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .card-header i { font-size:1.5rem; color:#ffd700; }
+        .card-value { font-size:1.5rem; font-weight:bold; margin-bottom:5px; }
+        .card-label { color:rgba(255,255,255,.7); font-size:.8rem; margin-top:5px; }
+        .alert { padding:12px; border-radius:10px; margin-bottom:20px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.3); font-size:.9rem; }
+        .btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+        .btn-add { background:rgba(76,209,55,.2); color:white; border:1px solid rgba(255,255,255,.3); padding:12px 24px; border-radius:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:10px; text-decoration:none; }
+        .btn-add:hover { background:rgba(76,209,55,.4); }
+        .btn { background:rgba(255,255,255,.2); color:white; border:1px solid rgba(255,255,255,.3); padding:10px 18px; border-radius:10px; cursor:pointer; font-weight:600; text-decoration:none; display:inline-block; }
+        .btn:hover { background:rgba(255,255,255,.35); }
+        .btn.on { background:rgba(76,209,55,.35); }
+        .btn.off { background:rgba(255,71,87,.3); }
+        .btn.danger { background:transparent; border:none; color:rgba(255,255,255,.5); padding:4px 8px; }
+        .func { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:20px; }
+        .func .val { font-size:1.6rem; font-weight:bold; }
+        .func .lbl { color:rgba(255,255,255,.7); font-size:.8rem; margin:4px 0 12px; }
+        input, select { padding:10px; border-radius:8px; border:none; background:rgba(255,255,255,.2); color:white; outline:none; }
+        input::placeholder { color:rgba(255,255,255,.5); }
+        select option { color:#333; }
+        input[type=range] { width:100%; padding:0; }
+        .input-group { text-align:left; margin-bottom:15px; }
+        .input-group label { display:block; font-size:.8rem; margin-bottom:5px; color:rgba(255,255,255,.7); }
+        .input-group input, .input-group select { width:100%; padding:12px; border-radius:10px; }
+        .btn-submit { width:100%; padding:12px; background:#fff; color:#764ba2; border:none; border-radius:10px; font-weight:bold; cursor:pointer; margin-top:10px; }
+        .switch { position:relative; display:inline-block; width:50px; height:24px; flex:none; }
+        .switch input { display:none; }
+        .slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,.2); transition:.4s; border-radius:34px; }
+        .slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:white; transition:.4s; border-radius:50%; }
+        input:checked + .slider { background:#4cd137; }
+        input:checked + .slider:before { transform:translateX(26px); }
+
+        /* --- Tabel --- */
+        .table-wrap { overflow-x:auto; border-radius:12px; }
+        table.data { width:100%; border-collapse:collapse; font-size:.9rem; min-width:560px; }
+        table.data th, table.data td { text-align:left; padding:10px; border-bottom:1px solid rgba(255,255,255,.15); vertical-align:top; }
+        table.data th { opacity:.75; font-size:.8rem; }
+
+        /* --- Modal --- */
+        #addModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.6); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:20px; }
+        .modal-content { background:rgba(120,110,180,.95); border:1px solid rgba(255,255,255,.2); padding:30px; border-radius:25px; width:100%; max-width:400px; box-shadow:0 25px 50px rgba(0,0,0,.3); text-align:center; max-height:90vh; overflow-y:auto; }
+
+        /* --- Mobile: hamburger + drawer --- */
+        @media (max-width: 860px) {
+            .topbar { display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:150;
+                padding:12px 16px; background:rgba(90,80,160,.85); backdrop-filter:blur(12px);
+                border-bottom:1px solid rgba(255,255,255,.15); }
+            .topbar button { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); color:white;
+                border-radius:10px; padding:8px 12px; font-size:1.1rem; cursor:pointer; }
+            .topbar span { font-weight:600; letter-spacing:2px; }
+            .sidebar { transform:translateX(-105%); width:270px; padding-top:20px; box-shadow:20px 0 50px rgba(0,0,0,.35); }
+            .sidebar.open { transform:translateX(0); }
+            body.nav-open #navOverlay { display:block; position:fixed; inset:0; z-index:190; background:rgba(0,0,0,.45); }
+            body.nav-open { overflow:hidden; }
+            .main-content { margin-left:0; padding:20px 16px 40px; }
+            .page-head h1 { font-size:1.4rem; }
+            .card { padding:18px; }
+            /* tabel jadi kartu bertumpuk */
+            table.data.stack { min-width:0; }
+            table.data.stack thead { display:none; }
+            table.data.stack, table.data.stack tbody, table.data.stack tr, table.data.stack td { display:block; width:100%; }
+            table.data.stack tr { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12);
+                border-radius:14px; margin-bottom:12px; padding:6px 14px; }
+            table.data.stack td { border:none; padding:6px 0; display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+            table.data.stack td::before { content:attr(data-label); font-size:.75rem; opacity:.65; flex:none; }
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="topbar">
+        <button id="navToggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
+        <span>smartHL</span>
+    </div>
+    <div id="navOverlay"></div>
+    <div class="sidebar" id="sidebar">
+        <h2>smart<span>HL</span></h2>
+        <ul class="nav-menu">
+            <a href="{{ url_for('dashboard') }}" class="nav-item {% if active=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('devices_page') }}" class="nav-item {% if active=='devices' %}active{% endif %}"><i class="fas fa-microchip"></i> Perangkat</a>
+            <a href="{{ url_for('kontrol_page') }}" class="nav-item {% if active=='kontrol' %}active{% endif %}"><i class="fas fa-sliders-h"></i> Kontrol</a>
+            <a href="/logout" class="nav-item" style="margin-top:auto;"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+        </ul>
+    </div>
+    <div class="main-content">
+        {% block content %}{% endblock %}
+    </div>
+<script>
+(function() {
+  var sb = document.getElementById('sidebar');
+  var tg = document.getElementById('navToggle');
+  var ov = document.getElementById('navOverlay');
+  function close() { sb.classList.remove('open'); document.body.classList.remove('nav-open'); }
+  if (tg) tg.addEventListener('click', function() {
+    sb.classList.toggle('open');
+    document.body.classList.toggle('nav-open', sb.classList.contains('open'));
+  });
+  if (ov) ov.addEventListener('click', close);
+  document.querySelectorAll('.nav-item').forEach(function(a) { a.addEventListener('click', close); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
