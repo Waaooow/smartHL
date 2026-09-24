@@ -56,7 +56,7 @@
             <a href="{{ url_for('dashboard') }}" style="color:rgba(255,255,255,.7); text-decoration:none;">← Dashboard</a>
             <h1 style="margin-top:8px;">{{ device.name }}</h1>
             <p style="color:rgba(255,255,255,.7)">
-                Status: <b style="color:{% if device.status=='Online' %}#4cd137{% else %}#ff4757{% endif %};">{{ device.status }}</b>
+                Status: <b data-dev-status style="color:{% if device.status=='Online' %}#4cd137{% else %}#ff4757{% endif %};">{{ device.status }}</b>
                 {% if device.mqtt_id %} · MQTT: <code>smarthl/{{ device.mqtt_id }}/#</code>{% endif %}
                 {% if device.last_seen %} · terakhir terlihat {{ device.last_seen }}{% endif %}
             </p>
@@ -67,6 +67,7 @@
             <div class="alert"><i class="fas fa-info-circle"></i> {{ message }}</div>
           {% endfor %}{% endif %}
         {% endwith %}
+        <div id="live-flash"></div>
 
         {% set sensors = funcs | selectattr('kind','equalto','sensor') | list %}
         {% set ctrls = funcs | rejectattr('kind','equalto','sensor') | list %}
@@ -76,7 +77,7 @@
         <div class="grid">
             {% for f in sensors %}
             <div class="func">
-                <div class="val">{% if f.key in vals %}{{ vals[f.key].value }}{% else %}—{% endif %} {{ f.unit }}</div>
+                <div class="val" data-val-for="{{ f.key }}" data-unit="{{ f.unit }}">{% if f.key in vals %}{{ vals[f.key].value }}{% else %}—{% endif %} {{ f.unit }}</div>
                 <div class="lbl">{{ f.label }}{% if f.pin %} · {{ f.pin }}{% endif %}</div>
                 <div style="font-size:.75rem; color:rgba(255,255,255,.5);">key: <code>{{ f.key }}</code></div>
             </div>
@@ -91,31 +92,32 @@
             {% set cur = vals[f.key].value if f.key in vals else 0 %}
             <div class="func">
                 <div class="lbl" style="font-size:1rem; color:white; font-weight:bold;">{{ f.label }}</div>
-                <div class="lbl">key: <code>{{ f.key }}</code>{% if f.pin %} · {{ f.pin }}{% endif %} · nilai: <b>{{ cur }}</b></div>
+                <div class="lbl">key: <code>{{ f.key }}</code>{% if f.pin %} · {{ f.pin }}{% endif %} · nilai: <b data-cur-for="{{ f.key }}">{{ cur }}</b></div>
                 {% if f.kind == 'toggle' %}
-                <form action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:flex; gap:10px; align-items:center;">
+                <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:flex; gap:10px; align-items:center;">
                     <input type="hidden" name="key" value="{{ f.key }}">
                     <input type="hidden" name="next" value="{{ url_for('device_detail', id=device.id) }}">
                     <label class="switch">
-                        <input type="checkbox" {% if cur %}checked{% endif %} onchange="this.form.value.value=this.checked?1:0; this.form.submit();">
+                        <input type="checkbox" data-toggle-for="{{ f.key }}" {% if cur %}checked{% endif %} onchange="toggleSubmit(this, '{{ f.key }}')">
                         <span class="slider"></span>
                     </label>
                     <input type="hidden" name="value" value="{{ 0 if cur else 1 }}">
-                    <button class="btn" type="submit">{{ 'Matikan' if cur else 'Nyalakan' }}</button>
+                    <button class="btn" type="submit" data-btn-for="{{ f.key }}">{{ 'Matikan' if cur else 'Nyalakan' }}</button>
                 </form>
                 {% elif f.kind == 'button' %}
-                <form action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:flex; gap:10px;">
+                <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:flex; gap:10px;">
                     <input type="hidden" name="key" value="{{ f.key }}">
                     <input type="hidden" name="next" value="{{ url_for('device_detail', id=device.id) }}">
                     <input type="hidden" name="value" value="1">
                     <button class="btn on" type="submit"><i class="fas fa-bolt"></i> {{ f.label }}</button>
                 </form>
                 {% elif f.kind == 'slider' %}
-                <form action="{{ url_for('device_action', id=device.id) }}" method="POST">
+                <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST">
                     <input type="hidden" name="key" value="{{ f.key }}">
                     <input type="hidden" name="next" value="{{ url_for('device_detail', id=device.id) }}">
                     <input type="range" name="value" min="0" max="100" value="{{ cur }}" style="width:100%;"
-                           onchange="this.form.submit();">
+                           data-slider-for="{{ f.key }}"
+                           oninput="lockKey('{{ f.key }}')" onchange="this.form.requestSubmit();">
                     <div class="lbl">0 – 100</div>
                 </form>
                 {% endif %}
@@ -170,5 +172,79 @@
             </table>
         </div>
     </div>
+<script>
+(function() {
+  var DEV_ID = {{ device.id }};
+  var locks = {};  // key -> timestamp ms, cegah polling menimpa aksi yg baru dikirim
+  window.lockKey = function(k) { locks[k] = Date.now() + 8000; };
+  window.toggleSubmit = function(box, k) {
+    box.form.value.value = box.checked ? 1 : 0;
+    box.form.requestSubmit();
+  };
+  function flashMsg(txt, ok) {
+    var box = document.getElementById('live-flash');
+    var d = document.createElement('div');
+    d.className = 'alert';
+    d.style.borderColor = ok ? 'rgba(76,209,55,.5)' : 'rgba(255,71,87,.5)';
+    d.textContent = txt;
+    box.prepend(d);
+    setTimeout(function(){ d.remove(); }, 4000);
+  }
+  function applyVal(key, raw) {
+    var num = parseFloat(raw);
+    document.querySelectorAll('[data-val-for="' + key + '"]').forEach(function(el) {
+      el.textContent = (isNaN(num) ? raw : (Math.round(num * 10) / 10)) + ' ' + (el.getAttribute('data-unit') || '');
+    });
+    document.querySelectorAll('[data-cur-for="' + key + '"]').forEach(function(el) {
+      el.textContent = isNaN(num) ? raw : num;
+    });
+    var on = num !== 0 && !isNaN(num);
+    document.querySelectorAll('[data-toggle-for="' + key + '"]').forEach(function(el) {
+      el.checked = on;
+      var hid = el.form ? el.form.value : null;
+      if (hid) hid.value = on ? 0 : 1;
+    });
+    document.querySelectorAll('[data-btn-for="' + key + '"]').forEach(function(el) {
+      el.textContent = on ? 'Matikan' : 'Nyalakan';
+    });
+    document.querySelectorAll('[data-slider-for="' + key + '"]').forEach(function(el) {
+      if (document.activeElement !== el) el.value = isNaN(num) ? 0 : num;
+    });
+  }
+  document.querySelectorAll('form.ajax-action').forEach(function(f) {
+    f.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var fd = new FormData(f);
+      var key = fd.get('key');
+      lockKey(key);
+      applyVal(key, fd.get('value'));  // optimistik: langsung geser
+      fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}})
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+          if (j.ok) { flashMsg('Terkirim: ' + j.key + '=' + j.value, true); }
+          else { flashMsg('Gagal: ' + (j.error || '?'), false); }
+        })
+        .catch(function(err) { flashMsg('Gagal kirim: ' + err, false); });
+    });
+  });
+  async function poll() {
+    try {
+      var r = await fetch('/device/' + DEV_ID + '/data', {headers: {'X-Requested-With': 'fetch'}});
+      if (!r.ok) return;
+      var j = await r.json();
+      var latest = {};
+      (j.telemetry || []).forEach(function(t) { if (!(t.key in latest)) latest[t.key] = t.value; });
+      Object.keys(latest).forEach(function(k) {
+        if (locks[k] && Date.now() < locks[k]) return;  // hormati aksi user
+        applyVal(k, latest[k]);
+      });
+      var st = document.querySelector('[data-dev-status]');
+      if (st && j.device) st.textContent = j.device.status;
+    } catch (e) { /* abaikan, coba lagi siklus berikut */ }
+  }
+  setInterval(poll, 2500);
+  poll();
+})();
+</script>
 </body>
 </html>

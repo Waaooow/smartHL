@@ -57,30 +57,30 @@
                 {% set cur = g.vals[f.key].value if f.key in g.vals else 0 %}
                 <div class="func">
                     <div style="font-weight:bold; margin-bottom:4px;">{{ f.label }}</div>
-                    <div style="font-size:.8rem; opacity:.7; margin-bottom:12px;"><code>{{ f.key }}</code> · {{ cur }}</div>
+                    <div style="font-size:.8rem; opacity:.7; margin-bottom:12px;"><code>{{ f.key }}</code> · <span data-cur data-dev="{{ g.device.id }}" data-key="{{ f.key }}">{{ cur }}</span></div>
                     {% if f.kind == 'toggle' %}
-                    <form action="{{ url_for('device_action', id=g.device.id) }}" method="POST" style="display:flex; gap:10px; align-items:center;">
+                    <form class="ajax-action" action="{{ url_for('device_action', id=g.device.id) }}" method="POST" style="display:flex; gap:10px; align-items:center;">
                         <input type="hidden" name="key" value="{{ f.key }}">
                         <input type="hidden" name="next" value="{{ url_for('kontrol_page') }}">
                         <label class="switch">
-                            <input type="checkbox" {% if cur %}checked{% endif %} onchange="this.form.value.value=this.checked?1:0; this.form.submit();">
+                            <input type="checkbox" data-toggle data-dev="{{ g.device.id }}" data-key="{{ f.key }}" {% if cur %}checked{% endif %} onchange="toggleSubmit(this)">
                             <span class="slider"></span>
                         </label>
                         <input type="hidden" name="value" value="{{ 0 if cur else 1 }}">
-                        <button class="btn" type="submit">{{ 'Matikan' if cur else 'Nyalakan' }}</button>
+                        <button class="btn" type="submit" data-btn data-dev="{{ g.device.id }}" data-key="{{ f.key }}">{{ 'Matikan' if cur else 'Nyalakan' }}</button>
                     </form>
                     {% elif f.kind == 'button' %}
-                    <form action="{{ url_for('device_action', id=g.device.id) }}" method="POST">
+                    <form class="ajax-action" action="{{ url_for('device_action', id=g.device.id) }}" method="POST">
                         <input type="hidden" name="key" value="{{ f.key }}">
                         <input type="hidden" name="next" value="{{ url_for('kontrol_page') }}">
                         <input type="hidden" name="value" value="1">
                         <button class="btn on" type="submit"><i class="fas fa-bolt"></i> {{ f.label }}</button>
                     </form>
                     {% elif f.kind == 'slider' %}
-                    <form action="{{ url_for('device_action', id=g.device.id) }}" method="POST">
+                    <form class="ajax-action" action="{{ url_for('device_action', id=g.device.id) }}" method="POST">
                         <input type="hidden" name="key" value="{{ f.key }}">
                         <input type="hidden" name="next" value="{{ url_for('kontrol_page') }}">
-                        <input type="range" name="value" min="0" max="100" value="{{ cur }}" onchange="this.form.submit();">
+                        <input type="range" name="value" min="0" max="100" value="{{ cur }}" data-slider data-dev="{{ g.device.id }}" data-key="{{ f.key }}" oninput="lockKey(this)" onchange="this.form.requestSubmit();">
                     </form>
                     {% endif %}
                 </div>
@@ -89,5 +89,67 @@
         </div>
         {% endfor %}
     </div>
+<script>
+(function() {
+  var locks = {};
+  function lockName(form, key) {
+    try { return new URL(form.action).pathname + '|' + key; }
+    catch (e) { return form.action + '|' + key; }
+  }
+  window.lockKey = function(el) {
+    var f = el.form || el.closest('form');
+    var k = (f.querySelector('input[name=key]') || {}).value + '';
+    locks[lockName(f, k)] = Date.now() + 8000;
+    if (el.dataset) { el.dataset.locked = '1'; setTimeout(function(){ el.dataset.locked = ''; }, 8000); }
+  };
+  window.toggleSubmit = function(box) {
+    box.form.value.value = box.checked ? 1 : 0;
+    box.form.requestSubmit();
+  };
+  function sel(dev, key, attr) {
+    return document.querySelectorAll('[' + attr + '][data-dev="' + dev + '"][data-key="' + key + '"]');
+  }
+  function applyVal(dev, key, raw) {
+    var num = parseFloat(raw);
+    var on = num !== 0 && !isNaN(num);
+    sel(dev, key, 'data-cur').forEach(function(el) { el.textContent = isNaN(num) ? raw : num; });
+    sel(dev, key, 'data-toggle').forEach(function(el) {
+      el.checked = on;
+      if (el.form && el.form.value) el.form.value.value = on ? 0 : 1;
+    });
+    sel(dev, key, 'data-btn').forEach(function(el) { el.textContent = on ? 'Matikan' : 'Nyalakan'; });
+    sel(dev, key, 'data-slider').forEach(function(el) {
+      if (document.activeElement !== el && !el.dataset.locked) el.value = isNaN(num) ? 0 : num;
+    });
+  }
+  document.querySelectorAll('form.ajax-action').forEach(function(f) {
+    f.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var fd = new FormData(f);
+      var key = fd.get('key');
+      locks[lockName(f, key)] = Date.now() + 8000;
+      var dev = (f.querySelector('[data-dev]') || {getAttribute: function(){return '';}}).getAttribute('data-dev');
+      applyVal(dev, key, fd.get('value'));
+      fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}}).catch(function(){});
+    });
+  });
+  async function poll() {
+    try {
+      var r = await fetch('/kontrol/data', {headers: {'X-Requested-With': 'fetch'}});
+      if (!r.ok) return;
+      var j = await r.json();
+      (j.groups || []).forEach(function(g) {
+        Object.keys(g.vals || {}).forEach(function(k) {
+          var lk = '/device/' + g.device_id + '/action|' + k;
+          if (locks[lk] && Date.now() < locks[lk]) return;
+          applyVal(String(g.device_id), k, g.vals[k].value);
+        });
+      });
+    } catch (e) {}
+  }
+  setInterval(poll, 2500);
+  poll();
+})();
+</script>
 </body>
 </html>

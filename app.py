@@ -285,9 +285,14 @@ def device_action(id):
         return redirect(url_for('device_detail', id=id))
     try:
         mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {key: value})
-        flash(f"Terkirim ke {device['name']}: {key}={raw}", 'success')
     except Exception as e:
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({"ok": False, "error": str(e)}), 502
         flash(f"Gagal kirim MQTT: {e}", 'error')
+        return redirect(request.form.get('next') or url_for('device_detail', id=id))
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({"ok": True, "key": key, "value": value})
+    flash(f"Terkirim ke {device['name']}: {key}={raw}", 'success')
     return redirect(request.form.get('next') or url_for('device_detail', id=id))
 
 @app.route('/device/<int:id>/functions', methods=['POST'])
@@ -353,6 +358,23 @@ def kontrol_page():
                            "vals": latest_values(conn, d["id"], [f["key"] for f in ctrls])})
     conn.close()
     return render_template('kontrol.html', groups=groups)
+
+@app.route('/kontrol/data')
+def kontrol_data():
+    """JSON untuk polling halaman Kontrol: nilai terbaru semua kontrol."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "unauthorized"}), 401
+    conn = get_db_connection()
+    devices = [dict(r) for r in conn.execute('SELECT * FROM devices ORDER BY id').fetchall()]
+    out = []
+    for d in devices:
+        funcs = [dict(r) for r in ensure_functions(conn, d)]
+        keys = [f["key"] for f in funcs]
+        if keys:
+            out.append({"device_id": d["id"], "status": d["status"],
+                        "vals": latest_values(conn, d["id"], keys)})
+    conn.close()
+    return jsonify({"groups": out})
 
 @app.route('/api/telemetry', methods=['POST'])
 def api_telemetry():
