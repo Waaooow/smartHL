@@ -294,6 +294,29 @@
                 {% if device.ip_address %}
                 <div class="card-label">IP: {{ device.ip_address }}</div>
                 {% endif %}
+                {% if device.mqtt_id %}
+                <div class="card-label">MQTT: <code>smarthl/{{ device.mqtt_id }}/#</code></div>
+                {% if device.telemetry %}
+                <div class="card-label">
+                    {% if device.telemetry.temp is defined %}Temp: <b>{{ device.telemetry.temp }}°C</b> {% endif %}
+                    {% if device.telemetry.hum is defined %}Hum: <b>{{ device.telemetry.hum }}%</b> {% endif %}
+                    {% if device.telemetry.led is defined %}LED: <b>{{ device.telemetry.led }}</b> {% endif %}
+                </div>
+                {% else %}
+                <div class="card-label" style="opacity:.7">Belum ada telemetri (jalankan sim_device.py)</div>
+                {% endif %}
+                <div style="margin-top:12px; display:flex; gap:8px;">
+                    <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
+                        <input type="hidden" name="led" value="1">
+                        <button class="btn-add" style="padding:8px 14px; font-size:.8rem;">LED ON</button>
+                    </form>
+                    <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
+                        <input type="hidden" name="led" value="0">
+                        <button class="btn-add" style="padding:8px 14px; font-size:.8rem; background:rgba(255,71,87,.3);">LED OFF</button>
+                    </form>
+                    <a href="{{ url_for('device_detail', id=device.id) }}" style="color:#fff; font-size:.8rem; align-self:center;">JSON</a>
+                </div>
+                {% endif %}
 
                 {% if device.type == 'PC' %}
                 <div style="margin-top: 15px;">
@@ -325,10 +348,14 @@
                 <div class="input-group">
                     <label>Tipe Perangkat</label>
                     <select name="type" id="typeSelect" onchange="togglePCFields()">
-                        <option value="Lampu">Lampu / Smart Plug</option>
+                        <option value="Lampu">Lampu / Smart Plug (MQTT)</option>
                         <option value="PC">Komputer (WoL & Ping)</option>
-                        <option value="Sensor">Sensor</option>
+                        <option value="Sensor">Sensor (MQTT)</option>
                     </select>
+                </div>
+                <div class="input-group">
+                    <label>MQTT ID (kosongkan = auto, cth: shl-demo01)</label>
+                    <input type="text" name="mqtt_id" placeholder="shl-demo01">
                 </div>
 
                 <div id="pcFields" style="display: none;">
