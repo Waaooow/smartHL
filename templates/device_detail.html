@@ -109,7 +109,7 @@
                     <td data-label="Unit/Pin">{{ f.unit }} {{ f.pin }}</td>
                     <td data-label="Alert">{% if f.alert_above is not none and f.alert_above != '' %}&gt;{{ f.alert_above }} {% endif %}{% if f.alert_below is not none and f.alert_below != '' %}&lt;{{ f.alert_below }}{% endif %}{% if (f.alert_above is none or f.alert_above == '') and (f.alert_below is none or f.alert_below == '') %}—{% endif %}</td>
                     <td data-label="Terakhir">{% if f.key in vals %}{{ vals[f.key].value }} <span style="opacity:.6;">({{ vals[f.key].ts }})</span>{% else %}—{% endif %}</td>
-                    <td data-label="Aksi"><a class="btn danger" href="{{ url_for('delete_function', fid=f.id) }}" onclick="return confirm('Hapus fungsi {{ f.key }}?')"><i class="fas fa-trash"></i></a></td>
+                    <td data-label="Aksi"><a class="btn danger" href="{{ url_for('edit_function', fid=f.id) }}"><i class="fas fa-pen"></i></a> <a class="btn danger" href="{{ url_for('delete_function', fid=f.id) }}" onclick="return confirm('Hapus fungsi {{ f.key }}?')"><i class="fas fa-trash"></i></a></td>
                 </tr>
                 {% endfor %}
             </tbody>

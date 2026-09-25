@@ -4,27 +4,38 @@
 {% block content %}
 <div class="page-head">
     <h1>Perangkat</h1>
-    <p>Kelola semua device. Tambah baru lewat tombol di Dashboard. Klik nama untuk atur fungsi &amp; kontrol.</p>
+    <p>Klik kartu untuk buka halaman perangkat (atur fungsi &amp; kontrol). Tambah baru lewat Dashboard.</p>
 </div>
-<div class="card">
-    <div class="table-wrap">
-        <table class="data stack">
-            <thead>
-                <tr><th>Nama</th><th>Tipe</th><th>Status</th><th>MQTT ID</th><th>Token</th><th></th></tr>
-            </thead>
-            <tbody>
-                {% for d in devices %}
-                <tr>
-                    <td data-label="Nama"><a href="{{ url_for('device_detail', id=d.id) }}"><b>{{ d.name }}</b></a></td>
-                    <td data-label="Tipe">{{ d.type }}</td>
-                    <td data-label="Status">{{ d.status }}</td>
-                    <td data-label="MQTT ID">{% if d.mqtt_id %}<code>smarthl/{{ d.mqtt_id }}/#</code>{% else %}—{% endif %}</td>
-                    <td data-label="Token">{% if d.token %}<code>{{ d.token }}</code>{% else %}—{% endif %}</td>
-                    <td data-label="Aksi"><a class="btn danger" href="{{ url_for('delete_device', id=d.id) }}" onclick="return confirm('Hapus {{ d.name }} + semua data?')"><i class="fas fa-trash"></i></a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="grid">
+    {% for d in devices %}
+    <div class="card" style="margin-bottom:0; cursor:pointer;" onclick="location.href='{{ url_for('device_detail', id=d.id) }}'">
+        <div class="card-header">
+            <i class="fas {% if d.type == 'PC' %}fa-desktop{% elif d.type == 'Lampu' %}fa-lightbulb{% elif d.type == 'Sensor' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
+            <span style="font-size:.75rem; opacity:.7;">{{ d.type }}</span>
+        </div>
+        <div class="card-value" style="font-size:1.2rem;">{{ d.name }}</div>
+        <div class="card-label">
+            Status: <b style="color:{% if d.status=='Online' %}#4cd137{% else %}#ff4757{% endif %};">{{ d.status }}</b>
+            {% if is_admin %} · {{ d.owner_name }}{% endif %}
+        </div>
+        {% if d.mqtt_id %}
+        <div class="card-label"><code>smarthl/{{ d.mqtt_id }}/#</code></div>
+        {% if d.funcs %}
+        <div class="card-label" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;" onclick="event.stopPropagation();">
+            {% for f in d.funcs %}
+            <a href="{{ url_for('edit_function', fid=f.id) }}" title="Edit {{ f.key }}" style="background:rgba(255,255,255,.15); border-radius:8px; padding:4px 10px; text-decoration:none; font-size:.78rem;">{{ f.label }}: <b>{% if f.key in d.vals %}{{ d.vals[f.key].value }}{% else %}—{% endif %}{{ f.unit }}</b> <i class="fas fa-pen" style="font-size:.65rem; opacity:.6;"></i></a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="card-label" style="opacity:.7">Belum ada data</div>
+        {% endif %}
+        {% elif d.ip_address %}
+        <div class="card-label">IP: {{ d.ip_address }}</div>
+        {% endif %}
     </div>
+    {% endfor %}
 </div>
+{% if not devices %}
+<div class="card">Belum ada perangkat. Tambah lewat tombol di Dashboard.</div>
+{% endif %}
 {% endblock %}

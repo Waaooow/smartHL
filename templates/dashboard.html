@@ -34,25 +34,48 @@
         {% endif %}
         {% if device.mqtt_id %}
         <div class="card-label">MQTT: <code>smarthl/{{ device.mqtt_id }}/#</code></div>
-        {% if device.telemetry %}
-        <div class="card-label">
-            {% if device.telemetry.temp is defined %}Temp: <b>{{ device.telemetry.temp }}°C</b> {% endif %}
-            {% if device.telemetry.hum is defined %}Hum: <b>{{ device.telemetry.hum }}%</b> {% endif %}
-            {% if device.telemetry.led is defined %}LED: <b>{{ device.telemetry.led }}</b> {% endif %}
+        {% if is_admin %}
+        <div class="card-label">Pemilik: <b>{{ device.owner_name }}</b></div>
+        {% endif %}
+        {% set sensors = device.funcs | selectattr('kind','equalto','sensor') | list %}
+        {% set ctrls = device.funcs | rejectattr('kind','equalto','sensor') | list %}
+        {% if sensors %}
+        <div class="card-label" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
+            {% for f in sensors %}
+            <span data-dchip data-dev="{{ device.id }}" data-key="{{ f.key }}" data-unit="{{ f.unit }}" data-label="{{ f.label }}" style="background:rgba(255,255,255,.15); border-radius:8px; padding:4px 10px;">{{ f.label }}: <b>{% if f.key in device.vals %}{{ device.vals[f.key].value }}{% else %}—{% endif %}{{ f.unit }}</b></span>
+            {% endfor %}
         </div>
-        {% else %}
-        <div class="card-label" style="opacity:.7">Belum ada telemetri (jalankan sim_device.py)</div>
+        {% elif device.funcs %}
+        <div class="card-label" style="opacity:.7">Belum ada telemetri</div>
+        {% endif %}
+        {% if ctrls %}
+        <div class="btn-row">
+            {% for f in ctrls %}
+            {% set cur = device.vals[f.key].value if f.key in device.vals else 0 %}
+            {% if f.kind == 'toggle' %}
+            <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:inline-flex; align-items:center; gap:6px;">
+                <input type="hidden" name="key" value="{{ f.key }}">
+                <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
+                <label class="switch" style="width:44px; height:22px;">
+                    <input type="checkbox" data-dtoggle data-dev="{{ device.id }}" data-key="{{ f.key }}" {% if cur %}checked{% endif %} onchange="this.form.value.value=this.checked?1:0; this.form.requestSubmit();">
+                    <span class="slider"></span>
+                </label>
+                <input type="hidden" name="value" value="{{ 0 if cur else 1 }}">
+                <span style="font-size:.8rem;">{{ f.label }}</span>
+            </form>
+            {% elif f.kind == 'button' %}
+            <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:inline;">
+                <input type="hidden" name="key" value="{{ f.key }}">
+                <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
+                <input type="hidden" name="value" value="1">
+                <button class="btn-add" style="padding:6px 12px; font-size:.75rem;" type="submit"><i class="fas fa-bolt"></i> {{ f.label }}</button>
+            </form>
+            {% endif %}
+            {% endfor %}
+        </div>
         {% endif %}
         <div class="btn-row">
             <a href="{{ url_for('device_detail', id=device.id) }}" class="btn-add" style="padding:8px 14px; font-size:.8rem;">BUKA <i class="fas fa-arrow-right"></i></a>
-            <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
-                <input type="hidden" name="led" value="1">
-                <button class="btn-add" style="padding:8px 14px; font-size:.8rem;">LED ON</button>
-            </form>
-            <form action="{{ url_for('device_cmd', id=device.id) }}" method="POST">
-                <input type="hidden" name="led" value="0">
-                <button class="btn-add" style="padding:8px 14px; font-size:.8rem; background:rgba(255,71,87,.3);">LED OFF</button>
-            </form>
         </div>
         {% endif %}
 
@@ -136,5 +159,51 @@
         const pcFields = document.getElementById('pcFields');
         pcFields.style.display = (select.value === 'PC') ? 'block' : 'none';
     }
+    // Aksi kartu tanpa reload + polling chip/toggle tiap 5 dtk
+    (function() {
+        var locks = {};
+        document.querySelectorAll('form.ajax-action').forEach(function(f) {
+            f.addEventListener('submit', function(e) {
+                e.preventDefault();
+                var fd = new FormData(f);
+                var key = fd.get('key');
+                var box = f.querySelector('[data-dtoggle]');
+                var lk = (box ? box.getAttribute('data-dev') : '') + '|' + key;
+                locks[lk] = Date.now() + 8000;
+                if (box) box.checked = fd.get('value') != '0';
+                fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}})
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) { window.showToast(j.ok ? ('Terkirim: ' + j.key + '=' + j.value) : ('Gagal: ' + (j.error || '?')), !!j.ok); })
+                    .catch(function() { window.showToast('Gagal kirim perintah', false); });
+            });
+        });
+        async function poll() {
+            try {
+                var r = await fetch('/kontrol/data', {headers: {'X-Requested-With': 'fetch'}});
+                if (!r.ok) return;
+                var j = await r.json();
+                (j.groups || []).forEach(function(g) {
+                    Object.keys(g.vals || {}).forEach(function(k) {
+                        var lk = g.device_id + '|' + k;
+                        if (locks[lk] && Date.now() < locks[lk]) return;
+                        var v = g.vals[k].value;
+                        document.querySelectorAll('[data-dchip][data-dev="' + g.device_id + '"][data-key="' + k + '"]').forEach(function(el) {
+                            var num = parseFloat(v);
+                            el.innerHTML = '';
+                            el.appendChild(document.createTextNode(el.getAttribute('data-label') + ': '));
+                            var b = document.createElement('b');
+                            b.textContent = (isNaN(num) ? v : (Math.round(num * 10) / 10)) + (el.getAttribute('data-unit') || '');
+                            el.appendChild(b);
+                        });
+                        document.querySelectorAll('[data-dtoggle][data-dev="' + g.device_id + '"][data-key="' + k + '"]').forEach(function(el) {
+                            el.checked = (parseFloat(v) !== 0);
+                        });
+                    });
+                });
+            } catch (e) {}
+        }
+        setInterval(poll, 5000);
+        poll();
+    })();
 </script>
 {% endblock %}

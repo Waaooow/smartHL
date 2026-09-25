@@ -312,6 +312,8 @@ def dashboard():
     if not session.get('logged_in'): return redirect(url_for('login_page'))
 
     conn = get_db_connection()
+    owners = {r['id']: (r['display_name'] or r['username'])
+              for r in conn.execute('SELECT id, username, display_name FROM users').fetchall()}
     devices_raw = visible_devices(conn)
     devices = []
     for d in devices_raw:
@@ -324,15 +326,16 @@ def dashboard():
                 dev['status'] = 'Online' if status_ping else 'Offline'
             except Exception:
                 pass
-        # Telemetri terakhir untuk device IoT
-        last = conn.execute(
-            "SELECT key, value, ts FROM telemetry WHERE device_id=? ORDER BY ts DESC LIMIT 4",
-            (dev['id'],)).fetchall()
-        dev['telemetry'] = {r['key']: r['value'] for r in last}
+        # Fungsi + nilai terakhir: kartu dashboard dinamis mengikuti device
+        funcs = [dict(r) for r in ensure_functions(conn, dev)] if dev.get('mqtt_id') else []
+        dev['funcs'] = funcs
+        dev['vals'] = latest_values(conn, dev['id'], [f['key'] for f in funcs])
+        dev['owner_name'] = owners.get(dev.get('owner_id'), '—')
         devices.append(dev)
     conn.close()
 
-    return render_template('dashboard.html', devices=devices, brokers=user_brokers())
+    return render_template('dashboard.html', devices=devices, brokers=user_brokers(),
+                           is_admin=_admin())
 
 @app.route('/add_device', methods=['POST'])
 def add_device():
@@ -524,6 +527,56 @@ def add_function(id):
     conn.close()
     return redirect(url_for('device_detail', id=id))
 
+@app.route('/functions/<int:fid>/edit')
+def edit_function(fid):
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    f = conn.execute('SELECT * FROM device_functions WHERE id=?', (fid,)).fetchone()
+    if not f:
+        conn.close()
+        return redirect(url_for('dashboard'))
+    dev = owned_device(conn, f['device_id'])
+    if not dev:
+        conn.close()
+        return redirect(url_for('dashboard'))
+    conn.close()
+    return render_template('function_edit.html', f=dict(f), device=dev)
+
+@app.route('/functions/<int:fid>/edit', methods=['POST'])
+def update_function(fid):
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    f = conn.execute('SELECT * FROM device_functions WHERE id=?', (fid,)).fetchone()
+    if not f or not owned_device(conn, f['device_id']):
+        conn.close()
+        return redirect(url_for('dashboard'))
+    label = (request.form.get('label') or f['key']).strip()
+    kind = request.form.get('kind', f['kind'])
+    unit = (request.form.get('unit') or '').strip()
+    pin = (request.form.get('pin') or '').strip()
+    if kind not in FUNC_KINDS:
+        conn.close()
+        flash('Kind tidak valid', 'error')
+        return redirect(url_for('edit_function', fid=fid))
+    def _num(v):
+        v = (v or '').strip()
+        if not v:
+            return None
+        try:
+            return float(v)
+        except ValueError:
+            return None
+    conn.execute(
+        'UPDATE device_functions SET label=?, kind=?, unit=?, pin=?, alert_above=?, alert_below=? WHERE id=?',
+        (label, kind, unit, pin, _num(request.form.get('alert_above')),
+         _num(request.form.get('alert_below')), fid))
+    conn.commit()
+    conn.close()
+    flash(f"Fungsi {f['key']} disimpan", 'success')
+    return redirect(url_for('device_detail', id=f['device_id']))
+
 @app.route('/functions/<int:fid>/delete')
 def delete_function(fid):
     if not session.get('logged_in'):
@@ -545,8 +598,15 @@ def devices_page():
         return redirect(url_for('login_page'))
     conn = get_db_connection()
     devices = visible_devices(conn)
+    owners = {r['id']: (r['display_name'] or r['username'])
+              for r in conn.execute('SELECT id, username, display_name FROM users').fetchall()}
+    for dev in devices:
+        funcs = [dict(r) for r in ensure_functions(conn, dev)] if dev.get('mqtt_id') else []
+        dev['funcs'] = funcs
+        dev['vals'] = latest_values(conn, dev['id'], [f['key'] for f in funcs])
+        dev['owner_name'] = owners.get(dev.get('owner_id'), '—')
     conn.close()
-    return render_template('devices.html', devices=devices)
+    return render_template('devices.html', devices=devices, is_admin=_admin())
 
 @app.route('/kontrol')
 def kontrol_page():

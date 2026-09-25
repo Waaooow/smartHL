@@ -1,0 +1,46 @@
+{% set active = 'devices' %}
+{% extends 'layout.html' %}
+{% block title %}Edit {{ f.key }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <a href="{{ url_for('device_detail', id=device.id) }}" style="color:rgba(255,255,255,.7); text-decoration:none;">← {{ device.name }}</a>
+    <h1 style="margin-top:8px;">Edit fungsi <code>{{ f.key }}</code></h1>
+</div>
+<div class="card" style="max-width:520px;">
+    <form action="{{ url_for('update_function', fid=f.id) }}" method="POST">
+        <div class="input-group">
+            <label>Label</label>
+            <input type="text" name="label" value="{{ f.label }}" required>
+        </div>
+        <div class="input-group">
+            <label>Kind</label>
+            <select name="kind">
+                <option value="sensor" {% if f.kind=='sensor' %}selected{% endif %}>sensor (tampil)</option>
+                <option value="toggle" {% if f.kind=='toggle' %}selected{% endif %}>toggle (on/off)</option>
+                <option value="button" {% if f.kind=='button' %}selected{% endif %}>button (tekan)</option>
+                <option value="slider" {% if f.kind=='slider' %}selected{% endif %}>slider (0-100)</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label>Unit</label>
+            <input type="text" name="unit" value="{{ f.unit }}">
+        </div>
+        <div class="input-group">
+            <label>Pin</label>
+            <input type="text" name="pin" value="{{ f.pin }}">
+        </div>
+        <div class="input-group">
+            <label>Alert jika &gt; (kosongkan = mati)</label>
+            <input type="text" name="alert_above" value="{{ f.alert_above if f.alert_above is not none else '' }}">
+        </div>
+        <div class="input-group">
+            <label>Alert jika &lt; (kosongkan = mati)</label>
+            <input type="text" name="alert_below" value="{{ f.alert_below if f.alert_below is not none else '' }}">
+        </div>
+        <button class="btn-submit" type="submit">SIMPAN</button>
+    </form>
+</div>
+<div class="card" style="max-width:520px; border-color:rgba(255,71,87,.4);">
+    <a class="btn off" href="{{ url_for('delete_function', fid=f.id) }}" onclick="return confirm('Hapus fungsi {{ f.key }}?')">Hapus fungsi ini</a>
+</div>
+{% endblock %}
