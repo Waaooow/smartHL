@@ -93,7 +93,7 @@ def main():
         if r.returncode != 0:
             print(f"ERROR passwd {u}: {r.stderr}", file=sys.stderr)
             return 1
-    os.chmod(passwd_file, 0o600)
+    os.chmod(passwd_file, 0o644)  # harus terbaca user mosquitto di container
 
     with open(acl_file, "w") as f:
         f.write("# GENERATED oleh sync-mqtt-auth.py — jangan edit manual\n")
@@ -104,7 +104,8 @@ def main():
             f.write(f"\nuser {u}\n")
             f.write(f"topic write smarthl/{u}/up/#\n")
             f.write(f"topic read smarthl/{u}/down/#\n")
-    os.chmod(acl_file, 0o600)
+    os.chmod(acl_file, 0o644)  # harus terbaca user mosquitto di container
+    os.chmod(args.out, 0o755)  # direktori harus bisa dilintasi user container
 
     print(f"OK: {len(users)} user -> {passwd_file}, {acl_file}")
     print("App/bridge pakai: MQTT_USER=bridge MQTT_PASS=(isi bridge.env)")
