@@ -11,6 +11,8 @@ import paho.mqtt.client as mqtt
 
 BROKER_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
 BROKER_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+BROKER_USER = os.environ.get("MQTT_USER", "")
+BROKER_PASS = os.environ.get("MQTT_PASS", "")
 DB_PATH = os.environ.get("DB_PATH", "database.db")
 
 def db():
@@ -145,6 +147,8 @@ def main():
     import uuid
     cid = f"smarthl-bridge-{os.getpid()}-{uuid.uuid4().hex[:6]}"
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
+    if BROKER_USER:
+        client.username_pw_set(BROKER_USER, BROKER_PASS)
     client.on_connect = on_connect
     client.on_message = on_message
     try:

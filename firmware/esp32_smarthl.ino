@@ -22,6 +22,7 @@ const char* WIFI_PASS  = "GANTI_PASS";
 const char* BROKER_IP  = "192.168.18.107";  // IP VM broker (atau IP publik/IPv6 server prod)
 const int   BROKER_PORT = 1883;
 const char* MQTT_ID    = "shl-demo01";       // HARUS sama dengan MQTT ID di dashboard!
+const char* MQTT_TOKEN = "GANTI_TOKEN";     // kolom Token di halaman Perangkat (auth broker)
 // =========================================
 
 #define LED_PIN    2
@@ -76,7 +77,7 @@ void callback(char* topic, byte* payload, unsigned int len) {
 void reconnect() {
   while (!mqtt.connected()) {
     Serial.print("MQTT connect...");
-    if (mqtt.connect(MQTT_ID, TOP_STATUS, 1, true, "offline")) {
+    if (mqtt.connect(MQTT_ID, MQTT_TOKEN, TOP_STATUS, 1, true, "offline")) {
       Serial.println("ok");
       mqtt.subscribe(TOP_DOWN);
       mqtt.publish(TOP_STATUS, "online", true);

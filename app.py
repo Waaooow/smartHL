@@ -11,6 +11,8 @@ import paho.mqtt.client as mqtt
 
 MQTT_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_USER = os.environ.get("MQTT_USER", "")
+MQTT_PASS = os.environ.get("MQTT_PASS", "")
 DB_PATH = os.environ.get("DB_PATH", "database.db")
 
 _mqtt_client = None
@@ -21,6 +23,8 @@ def mqtt_pub(topic, payload: dict):
         import uuid
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                         client_id=f"smarthl-web-{uuid.uuid4().hex[:6]}")
+        if MQTT_USER:
+            c.username_pw_set(MQTT_USER, MQTT_PASS)
         c.connect(MQTT_HOST, MQTT_PORT, 60)
         c.loop_start()
         _mqtt_client = c
@@ -83,6 +87,28 @@ def init_db():
         conn.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
     except Exception:
         pass
+    try:
+        conn.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0')
+    except Exception:
+        pass
+    try:
+        conn.execute('ALTER TABLE devices ADD COLUMN owner_id INTEGER')
+    except Exception:
+        pass
+    # backfill: device tanpa pemilik -> admin pertama (atau user id 1)
+    try:
+        admin = conn.execute("SELECT id FROM users WHERE is_admin=1 ORDER BY id LIMIT 1").fetchone()
+        if not admin:
+            conn.execute('UPDATE users SET is_admin=1 WHERE id=1')
+            admin = conn.execute('SELECT id FROM users WHERE id=1').fetchone()
+        if admin:
+            conn.execute('UPDATE devices SET owner_id=? WHERE owner_id IS NULL', (admin['id'],))
+    except Exception:
+        pass
+    try:
+        conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_unique ON devices(mqtt_id)')
+    except Exception:
+        pass  # NULL boleh ganda di SQLite; duplikat nyata akan gagal di sini bila ada
     conn.execute('''
         CREATE TABLE IF NOT EXISTS devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,11 +198,35 @@ def login_action():
         session['logged_in'] = True
         session['user_id'] = user['id']
         session['display_name'] = user['display_name'] or user['username']
+        session['is_admin'] = bool(user['is_admin']) if 'is_admin' in user.keys() else (user['id'] == 1)
         conn.close()
         return redirect(url_for('dashboard'))
     conn.close()
     flash('Username atau password salah!', 'error')
     return redirect(url_for('login_page'))
+
+def _uid():
+    return session.get('user_id')
+
+def _admin():
+    return bool(session.get('is_admin'))
+
+def visible_devices(conn):
+    """Device yang boleh dilihat user saat ini (admin = semua)."""
+    if _admin():
+        return [dict(r) for r in conn.execute('SELECT * FROM devices ORDER BY id').fetchall()]
+    return [dict(r) for r in conn.execute(
+        'SELECT * FROM devices WHERE owner_id=? ORDER BY id', (_uid(),)).fetchall()]
+
+def owned_device(conn, id):
+    """Satu device bila boleh diakses, else None."""
+    row = conn.execute('SELECT * FROM devices WHERE id=?', (id,)).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    if _admin() or d.get('owner_id') == _uid():
+        return d
+    return None
 
 def notify(conn, device_id, key, title, message, level='info'):
     conn.execute(
@@ -213,7 +263,7 @@ def dashboard():
     if not session.get('logged_in'): return redirect(url_for('login_page'))
 
     conn = get_db_connection()
-    devices_raw = conn.execute('SELECT * FROM devices').fetchall()
+    devices_raw = visible_devices(conn)
     devices = []
     for d in devices_raw:
         dev = dict(d)
@@ -249,19 +299,26 @@ def add_device():
     if exists:
         mqtt_id = 'shl-' + secrets.token_hex(4)
     token = secrets.token_hex(8)
-    conn.execute('INSERT INTO devices (name, type, ip_address, mac_address, interface, mqtt_id, token) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                 (name, dev_type, ip, mac, interface, mqtt_id, token))
-    conn.commit()
+    try:
+        conn.execute('INSERT INTO devices (name, type, ip_address, mac_address, interface, mqtt_id, token, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                     (name, dev_type, ip, mac, interface, mqtt_id, token, _uid()))
+        conn.commit()
+    except Exception:
+        conn.close()
+        flash(f'MQTT ID {mqtt_id} sudah dipakai (harus unik global)', 'error')
+        return redirect(url_for('dashboard'))
     conn.close()
     flash(f'Device {name} dibuat. MQTT ID: {mqtt_id}', 'success')
     return redirect(url_for('dashboard'))
 
 @app.route('/wol/<int:id>')
 def wake_device(id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
     conn = get_db_connection()
-    device = conn.execute('SELECT * FROM devices WHERE id = ?', (id,)).fetchone()
+    device = owned_device(conn, id)
     conn.close()
-    
+
     if device and device['mac_address']:
         try:
             # Kirim magic packet lewat interface yang ditentukan user (misal: eth0)
@@ -274,6 +331,9 @@ def wake_device(id):
 @app.route('/delete_device/<int:id>')
 def delete_device(id):
     conn = get_db_connection()
+    if not owned_device(conn, id):
+        conn.close()
+        return redirect(url_for('dashboard'))
     conn.execute('DELETE FROM device_functions WHERE device_id=?', (id,))
     conn.execute('DELETE FROM telemetry WHERE device_id=?', (id,))
     conn.execute('DELETE FROM devices WHERE id = ?', (id,))
@@ -286,7 +346,7 @@ def device_cmd(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    device = conn.execute('SELECT * FROM devices WHERE id=?', (id,)).fetchone()
+    device = owned_device(conn, id)
     conn.close()
     if not device or not device['mqtt_id']:
         flash('Device belum punya MQTT ID', 'error')
@@ -305,11 +365,10 @@ def device_detail(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    device = conn.execute('SELECT * FROM devices WHERE id=?', (id,)).fetchone()
+    device = owned_device(conn, id)
     if not device:
         conn.close()
         return redirect(url_for('dashboard'))
-    device = dict(device)
     funcs = [dict(r) for r in ensure_functions(conn, device)]
     vals = latest_values(conn, id, [f["key"] for f in funcs])
     hist = [dict(r) for r in conn.execute(
@@ -323,7 +382,7 @@ def device_data(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    device = conn.execute('SELECT * FROM devices WHERE id=?', (id,)).fetchone()
+    device = owned_device(conn, id)
     rows = conn.execute(
         "SELECT key, value, ts FROM telemetry WHERE device_id=? ORDER BY ts DESC LIMIT 50",
         (id,)).fetchall()
@@ -338,7 +397,7 @@ def device_action(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    device = conn.execute('SELECT * FROM devices WHERE id=?', (id,)).fetchone()
+    device = owned_device(conn, id)
     conn.close()
     if not device or not device['mqtt_id']:
         flash('Device belum punya MQTT ID', 'error')
@@ -369,6 +428,10 @@ def device_action(id):
 def add_function(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    if not owned_device(conn, id):
+        conn.close()
+        return redirect(url_for('dashboard'))
     key = (request.form.get('key') or '').strip().lower()
     label = (request.form.get('label') or key).strip()
     kind = request.form.get('kind', 'sensor')
@@ -387,7 +450,6 @@ def add_function(id):
             return None
     alert_above = _num(request.form.get('alert_above'))
     alert_below = _num(request.form.get('alert_below'))
-    conn = get_db_connection()
     try:
         conn.execute(
             "INSERT INTO device_functions (device_id, key, label, kind, unit, pin, sort, alert_above, alert_below)"
@@ -406,6 +468,9 @@ def delete_function(fid):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
     r = conn.execute('SELECT device_id FROM device_functions WHERE id=?', (fid,)).fetchone()
+    if r and not owned_device(conn, r['device_id']):
+        conn.close()
+        return redirect(url_for('dashboard'))
     if r:
         conn.execute('DELETE FROM device_functions WHERE id=?', (fid,))
         conn.commit()
@@ -417,8 +482,7 @@ def devices_page():
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    rows = conn.execute('SELECT * FROM devices ORDER BY id').fetchall()
-    devices = [dict(r) for r in rows]
+    devices = visible_devices(conn)
     conn.close()
     return render_template('devices.html', devices=devices)
 
@@ -428,7 +492,7 @@ def kontrol_page():
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    devices = [dict(r) for r in conn.execute('SELECT * FROM devices ORDER BY id').fetchall()]
+    devices = visible_devices(conn)
     groups = []
     for d in devices:
         funcs = [dict(r) for r in ensure_functions(conn, d)]
@@ -445,7 +509,7 @@ def kontrol_data():
     if not session.get('logged_in'):
         return jsonify({"error": "unauthorized"}), 401
     conn = get_db_connection()
-    devices = [dict(r) for r in conn.execute('SELECT * FROM devices ORDER BY id').fetchall()]
+    devices = visible_devices(conn)
     out = []
     for d in devices:
         funcs = [dict(r) for r in ensure_functions(conn, d)]
@@ -545,10 +609,17 @@ def notifications_page():
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    rows = conn.execute(
-        """SELECT n.*, d.name AS device_name FROM notifications n
-           LEFT JOIN devices d ON d.id=n.device_id
-           ORDER BY n.ts DESC LIMIT 100""").fetchall()
+    if _admin():
+        rows = conn.execute(
+            """SELECT n.*, d.name AS device_name FROM notifications n
+               LEFT JOIN devices d ON d.id=n.device_id
+               ORDER BY n.ts DESC LIMIT 100""").fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT n.*, d.name AS device_name FROM notifications n
+               LEFT JOIN devices d ON d.id=n.device_id
+               WHERE n.device_id IS NULL OR d.owner_id=?
+               ORDER BY n.ts DESC LIMIT 100""", (_uid(),)).fetchall()
     conn.close()
     return render_template('notifications.html', items=[dict(r) for r in rows])
 
@@ -557,7 +628,12 @@ def notifications_read():
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
-    conn.execute('UPDATE notifications SET read=1 WHERE read=0')
+    if _admin():
+        conn.execute('UPDATE notifications SET read=1 WHERE read=0')
+    else:
+        conn.execute(
+            """UPDATE notifications SET read=1 WHERE read=0 AND (device_id IS NULL OR device_id IN
+               (SELECT id FROM devices WHERE owner_id=?))""", (_uid(),))
     conn.commit()
     conn.close()
     flash('Semua notifikasi ditandai dibaca', 'success')
@@ -572,11 +648,23 @@ def api_notifications():
     except ValueError:
         limit = 8
     conn = get_db_connection()
-    rows = conn.execute(
-        """SELECT n.*, d.name AS device_name FROM notifications n
-           LEFT JOIN devices d ON d.id=n.device_id
-           ORDER BY n.ts DESC LIMIT ?""", (limit,)).fetchall()
-    unread = conn.execute('SELECT COUNT(*) c FROM notifications WHERE read=0').fetchone()['c']
+    if _admin():
+        rows = conn.execute(
+            """SELECT n.*, d.name AS device_name FROM notifications n
+               LEFT JOIN devices d ON d.id=n.device_id
+               ORDER BY n.ts DESC LIMIT ?""", (limit,)).fetchall()
+        unread = conn.execute('SELECT COUNT(*) c FROM notifications WHERE read=0').fetchone()['c']
+    else:
+        rows = conn.execute(
+            """SELECT n.*, d.name AS device_name FROM notifications n
+               LEFT JOIN devices d ON d.id=n.device_id
+               WHERE n.device_id IS NULL OR d.owner_id=?
+               ORDER BY n.ts DESC LIMIT ?""", (_uid(), limit)).fetchall()
+        unread = conn.execute(
+            """SELECT COUNT(*) c FROM notifications n
+               LEFT JOIN devices d ON d.id=n.device_id
+               WHERE n.read=0 AND (n.device_id IS NULL OR d.owner_id=?)""",
+            (_uid(),)).fetchone()['c']
     conn.close()
     return jsonify({"unread": unread, "items": [dict(r) for r in rows]})
 
@@ -585,10 +673,68 @@ def api_notifications_read():
     if not session.get('logged_in'):
         return jsonify({"error": "unauthorized"}), 401
     conn = get_db_connection()
-    conn.execute('UPDATE notifications SET read=1 WHERE read=0')
+    if _admin():
+        conn.execute('UPDATE notifications SET read=1 WHERE read=0')
+    else:
+        conn.execute(
+            """UPDATE notifications SET read=1 WHERE read=0 AND (device_id IS NULL OR device_id IN
+               (SELECT id FROM devices WHERE owner_id=?))""", (_uid(),))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+@app.route('/users')
+def users_page():
+    if not session.get('logged_in') or not _admin():
+        return redirect(url_for('dashboard'))
+    conn = get_db_connection()
+    rows = conn.execute(
+        """SELECT u.*, (SELECT COUNT(*) FROM devices d WHERE d.owner_id=u.id) AS ndev
+           FROM users u ORDER BY u.id""").fetchall()
+    conn.close()
+    return render_template('users.html', users=[dict(r) for r in rows])
+
+@app.route('/users', methods=['POST'])
+def users_create():
+    from werkzeug.security import generate_password_hash
+    if not session.get('logged_in') or not _admin():
+        return redirect(url_for('dashboard'))
+    username = (request.form.get('username') or '').strip().lower()
+    password = request.form.get('password') or ''
+    display = (request.form.get('display_name') or username).strip()
+    if not username or not username.replace('_', '').isalnum() or len(password) < 4:
+        flash('Username alfanumerik + password min. 4 karakter', 'error')
+        return redirect(url_for('users_page'))
+    conn = get_db_connection()
+    try:
+        conn.execute('INSERT INTO users (username, password, display_name, is_admin) VALUES (?,?,?,0)',
+                     (username, generate_password_hash(password), display))
+        conn.commit()
+        flash(f'User {username} dibuat', 'success')
+    except Exception:
+        flash(f'Username {username} sudah dipakai', 'error')
+    conn.close()
+    return redirect(url_for('users_page'))
+
+@app.route('/users/<int:id>/delete')
+def users_delete(id):
+    if not session.get('logged_in') or not _admin():
+        return redirect(url_for('dashboard'))
+    if id == session.get('user_id'):
+        flash('Tidak bisa hapus akun sendiri', 'error')
+        return redirect(url_for('users_page'))
+    conn = get_db_connection()
+    devs = conn.execute('SELECT id FROM devices WHERE owner_id=?', (id,)).fetchall()
+    for d in devs:
+        conn.execute('DELETE FROM device_functions WHERE device_id=?', (d['id'],))
+        conn.execute('DELETE FROM telemetry WHERE device_id=?', (d['id'],))
+        conn.execute('DELETE FROM notifications WHERE device_id=?', (d['id'],))
+    conn.execute('DELETE FROM devices WHERE owner_id=?', (id,))
+    conn.execute('DELETE FROM users WHERE id=?', (id,))
+    conn.commit()
+    conn.close()
+    flash('User + semua device-nya dihapus', 'success')
+    return redirect(url_for('users_page'))
 
 def _start_bridge_thread():
     try:

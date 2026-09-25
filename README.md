@@ -25,6 +25,22 @@ python3 sim_device.py shl-demo01  # terminal 3
 Login dashboard: `admin` / `admin123`. Buat device tipe Sensor/Lampu,
 isi MQTT ID misal `shl-demo01`, lalu telemetri + tombol LED langsung jalan.
 
+## Multi-user (1 broker + 1 dashboard untuk banyak orang)
+
+* Tiap device punya pemilik (`owner_id`). User biasa hanya melihat device,
+  notifikasi, dan badge miliknya; admin melihat semua + halaman Pengguna.
+* `mqtt_id` unik global. Tambah device duplikat otomatis diganti acak.
+* Broker mengunci per device: username = `mqtt_id`, password = kolom Token.
+  Setelah tambah/hapus device, jalankan lalu reload broker:
+```bash
+python3 scripts/sync-mqtt-auth.py
+kill -HUP $(pgrep -f 'mosquitto.*local.conf')   # lokal; di docker: compose restart mosquitto
+```
+* Onboarding teman: admin buat akun di Pengguna → teman login → Add Device →
+  isi `MQTT_ID` + `MQTT_TOKEN` di sketch → flash.
+* App/bridge publish sebagai user `bridge` (`MQTT_USER`/`MQTT_PASS`,
+  password di `mosquitto/auth/bridge.env`, jangan commit).
+
 ## Coba di prod server pakai container
 ```bash
 cp .env.example .env   # lalu isi SECRET_KEY random

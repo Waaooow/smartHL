@@ -11,9 +11,10 @@ Dua contoh siap-flash, protokolnya sama (dashboard tidak peduli board apa):
 
 1. Arduino IDE → Boards Manager → install `esp32` (Espressif) / `esp8266`.
    Library Manager → install `PubSubClient` (Nick O'Leary). Itu saja.
-2. Buka file `.ino` yang sesuai, isi 4 nilai: `WIFI_SSID`, `WIFI_PASS`,
+2. Buka file `.ino` yang sesuai, isi 5 nilai: `WIFI_SSID`, `WIFI_PASS`,
    `BROKER_IP` (IP broker yang terjangkau dari WiFi rumah, cth `192.168.18.107`),
-   `MQTT_ID` (contoh `shl-lampu-teras`).
+   `MQTT_ID` (contoh `shl-lampu-teras`), dan `MQTT_TOKEN` (kolom Token device
+   di halaman Perangkat — broker menolak koneksi tanpa ini).
 3. Flash, buka Serial Monitor 115200. Harus muncul `WiFi... <ip>` lalu `MQTT connect...ok`.
 4. Di dashboard → Tambah Perangkat → tipe Sensor/Lampu → **MQTT ID persis sama**
    dengan langkah 2. Dalam ±5 detik status jadi Online + angka muncul.
@@ -33,6 +34,7 @@ Dua contoh siap-flash, protokolnya sama (dashboard tidak peduli board apa):
 | Gejala | Penyebab paling sering |
 |---|---|
 | Serial `MQTT connect...gagal rc=-2` berulang | Salah `BROKER_IP` / ESP beda jaringan dari broker / port 1883 ketutup |
+| Serial `MQTT connect...gagal rc=4` berulang | MQTT ID salah atau TOKEN salah (cek kolom Token di dashboard) |
 | Serial ok, dashboard tetap Offline | MQTT ID beda antara firmware vs dashboard (cek huruf besar/kecil) |
 | Tombol diklik, relay tidak gerak | Key belum ada di `handleCmd()` / salah pin |
 | Toggle balik sendiri setelah diklik | Normal jika device belum lapor balik >8 detik; cek ESP masih publish |

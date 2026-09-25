@@ -4,3 +4,4 @@ database.db
 *.log
 .env
 mosquitto/data/
+mosquitto/auth/

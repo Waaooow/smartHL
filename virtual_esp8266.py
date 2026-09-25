@@ -19,10 +19,12 @@ import sys
 import time
 
 import paho.mqtt.client as mqtt
+import os
 
 MQTT_ID = sys.argv[1] if len(sys.argv) > 1 else "shl-esp01"
-BROKER = "127.0.0.1"
-PORT = 1883
+TOKEN = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("DEVICE_TOKEN", "")
+BROKER = os.environ.get("MQTT_HOST", "127.0.0.1")
+PORT = int(os.environ.get("MQTT_PORT", "1883"))
 
 TOP_UP = f"smarthl/{MQTT_ID}/up/telemetry"
 TOP_DOWN = f"smarthl/{MQTT_ID}/down/cmd"
@@ -83,6 +85,8 @@ def loop(client):
 def main():
     setup()
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"virt-{MQTT_ID}")
+    if TOKEN:
+        client.username_pw_set(MQTT_ID, TOKEN)
     client.will_set(TOP_STATUS, "offline", qos=1, retain=True)
     client.on_connect = on_connect
     client.on_message = on_message

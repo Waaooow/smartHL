@@ -12,6 +12,7 @@ services:
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./mosquitto/auth:/mosquitto/config/auth:ro
       - mosq-data:/mosquitto/data
       - mosq-log:/mosquitto/log
 
@@ -25,6 +26,8 @@ services:
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
+      MQTT_USER: bridge
+      MQTT_PASS: ${BRIDGE_PASSWORD:?isi BRIDGE_PASSWORD dari mosquitto/auth/bridge.env}
       DB_PATH: /data/database.db
       RUN_BRIDGE: 1
       SECRET_KEY: ${SECRET_KEY:?isi SECRET_KEY di file .env dulu}

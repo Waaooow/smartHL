@@ -1,0 +1,36 @@
+{% set active = 'users' %}
+{% extends 'layout.html' %}
+{% block title %}Pengguna{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Pengguna</h1>
+    <p>Akun teman yang boleh pakai broker ini. Tiap user hanya melihat device miliknya.</p>
+</div>
+<div class="card" style="max-width:520px;">
+    <h3 style="margin-bottom:12px;"><i class="fas fa-user-plus"></i> Tambah user</h3>
+    <form action="{{ url_for('users_create') }}" method="POST" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input name="username" placeholder="username" required style="flex:1; min-width:120px;">
+        <input name="display_name" placeholder="nama tampilan" style="flex:1; min-width:140px;">
+        <input name="password" type="password" placeholder="password (min 4)" required style="flex:1; min-width:120px;">
+        <button class="btn" type="submit">Buat</button>
+    </form>
+</div>
+<div class="card">
+    <div class="table-wrap">
+        <table class="data stack">
+            <thead><tr><th>Username</th><th>Nama</th><th>Role</th><th>Device</th><th></th></tr></thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td data-label="Username"><code>{{ u.username }}</code></td>
+                    <td data-label="Nama">{{ u.display_name or '—' }}</td>
+                    <td data-label="Role">{% if u.is_admin %}admin{% else %}user{% endif %}</td>
+                    <td data-label="Device">{{ u.ndev }}</td>
+                    <td data-label="Aksi">{% if u.id != session.get('user_id') %}<a class="btn danger" href="{{ url_for('users_delete', id=u.id) }}" onclick="return confirm('Hapus {{ u.username }} + SEMUA device-nya?')"><i class="fas fa-trash"></i></a>{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
