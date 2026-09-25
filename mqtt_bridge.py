@@ -107,6 +107,17 @@ def ensure_schema():
         password TEXT DEFAULT '',
         enabled INTEGER DEFAULT 1
     )""")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS broker_stats (
+        id {PK},
+        broker_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT DEFAULT '',
+        ts DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    try:
+        conn.execute("CREATE UNIQUE INDEX idx_bstat_broker_key ON broker_stats(broker_id, key)")
+    except Exception:
+        pass
     try:
         conn.execute("CREATE INDEX idx_notif_read_ts ON notifications(read, ts)")
     except Exception:
@@ -168,14 +179,54 @@ def handle_telemetry(broker_id, mqtt_id, payload: dict):
     conn.commit()
     conn.close()
 
+# Metrik $SYS mosquitto yang disimpan (topik -> key tampil)
+SYS_MAP = {
+    "uptime": "uptime",
+    "version": "version",
+    "clients/connected": "clients_connected",
+    "clients/total": "clients_total",
+    "clients/maximum": "clients_max",
+    "messages/received": "msg_in",
+    "messages/sent": "msg_out",
+    "subscriptions/count": "subscriptions",
+    "bytes/received": "bytes_in",
+    "bytes/sent": "bytes_out",
+    "publish/messages/received": "pub_in",
+    "publish/messages/sent": "pub_out",
+}
+
+
+def store_sys(broker_id, topic, payload):
+    if not topic.startswith("$SYS/broker/"):
+        return
+    tail = topic[len("$SYS/broker/"):]
+    key = SYS_MAP.get(tail)
+    if not key:
+        return
+    try:
+        conn = db()
+        conn.execute("REPLACE INTO broker_stats (broker_id, key, value, ts) VALUES (?,?,?,CURRENT_TIMESTAMP)",
+                     (broker_id, key, payload[:64]))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[bridge:{broker_id}] stat error: {e}", flush=True)
+
+
 def make_callbacks(broker_id):
     def on_connect(client, userdata, flags, reason_code, props=None):
         print(f"[bridge:{broker_id}] connected rc={reason_code}", flush=True)
         client.subscribe("smarthl/+/up/telemetry", qos=0)
         client.subscribe("smarthl/+/up/status", qos=0)
+        if broker_id == 1:
+            client.subscribe("$SYS/#", qos=0)
 
     def on_message(client, userdata, msg):
         try:
+            if msg.topic.startswith("$SYS/"):
+                store_sys(broker_id, msg.topic,
+                          msg.payload.decode(errors="ignore").strip())
+                return
             parts = msg.topic.split("/")
             # smarthl/{mqtt_id}/up/{kind}
             if len(parts) != 4:
@@ -203,8 +254,10 @@ def run_broker(b):
     import uuid
     cid = f"smarthl-bridge-{b['id']}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
-    if b.get("username"):
-        client.username_pw_set(b["username"], b.get("password") or "")
+    user = b.get("username") or (BROKER_USER if b["id"] == 1 else "")
+    pw = b.get("password") or (BROKER_PASS if b["id"] == 1 else "")
+    if user:
+        client.username_pw_set(user, pw)
     on_connect, on_message = make_callbacks(b["id"])
     client.on_connect = on_connect
     client.on_message = on_message

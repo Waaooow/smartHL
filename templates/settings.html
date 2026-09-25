@@ -6,6 +6,20 @@
     <h1>Settings</h1>
     <p>Pilih broker mana yang dipakai. Default: broker bawaan yang ikut paket compose.</p>
 </div>
+{% if is_admin and stats %}
+<div class="card">
+    <h3 style="margin-bottom:4px;"><i class="fas fa-server"></i> Broker bawaan <span style="font-size:.75rem; opacity:.6;">(live via $SYS)</span></h3>
+    <p style="font-size:.75rem; opacity:.6; margin-bottom:15px;">Mosquitto {{ stats.get('version', {}).get('value', '—') }} · update {{ stats.get('clients_connected', {}).get('ts', '—') }}</p>
+    <div class="grid">
+        <div class="func"><div class="val">{{ stats.get('uptime', {}).get('human', '—') }}</div><div class="lbl">Uptime</div></div>
+        <div class="func"><div class="val">{{ stats.get('clients_connected', {}).get('value', '—') }}</div><div class="lbl">Klien connect (total {{ stats.get('clients_total', {}).get('value', '—') }})</div></div>
+        <div class="func"><div class="val">{{ stats.get('subscriptions', {}).get('value', '—') }}</div><div class="lbl">Subscription</div></div>
+        <div class="func"><div class="val">{{ stats.get('msg_in', {}).get('value', '—') }}</div><div class="lbl">Pesan masuk</div></div>
+        <div class="func"><div class="val">{{ stats.get('msg_out', {}).get('value', '—') }}</div><div class="lbl">Pesan keluar</div></div>
+        <div class="func"><div class="val">{{ stats.get('pub_in', {}).get('value', '—') }} / {{ stats.get('pub_out', {}).get('value', '—') }}</div><div class="lbl">Publish in / out</div></div>
+    </div>
+</div>
+{% endif %}
 <div class="card">
     <div class="table-wrap">
         <table class="data stack">

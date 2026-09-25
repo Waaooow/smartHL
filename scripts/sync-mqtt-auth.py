@@ -97,7 +97,7 @@ def main():
 
     with open(acl_file, "w") as f:
         f.write("# GENERATED oleh sync-mqtt-auth.py — jangan edit manual\n")
-        f.write("user bridge\ntopic readwrite smarthl/#\n")
+        f.write("user bridge\ntopic readwrite smarthl/#\ntopic read $SYS/#\n")
         for u, _ in users:
             if u == "bridge":
                 continue

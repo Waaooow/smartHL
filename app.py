@@ -156,6 +156,17 @@ def init_db():
         password TEXT DEFAULT '',
         enabled INTEGER DEFAULT 1
     )''')
+    conn.execute(f'''CREATE TABLE IF NOT EXISTS broker_stats (
+        id {PK},
+        broker_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT DEFAULT '',
+        ts DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+    try:
+        conn.execute('CREATE UNIQUE INDEX idx_bstat_broker_key ON broker_stats(broker_id, key)')
+    except Exception:
+        pass
     for idx in ['CREATE INDEX idx_tel_dev_ts ON telemetry(device_id, ts)',
                 'CREATE UNIQUE INDEX idx_func_dev_key ON device_functions(device_id, key)',
                 'CREATE INDEX idx_notif_read_ts ON notifications(read, ts)',
@@ -927,7 +938,29 @@ def settings_page():
     """Koneksi broker milik user + info broker bawaan."""
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
-    return render_template('settings.html', brokers=user_brokers())
+    stats = {}
+    if _admin():
+        conn = get_db_connection()
+        for r in conn.execute("SELECT key, value, ts FROM broker_stats WHERE broker_id=1").fetchall():
+            stats[r['key']] = {'value': r['value'], 'ts': r['ts']}
+        conn.close()
+        try:
+            up = int(float(stats.get('uptime', {}).get('value', 0)))
+            d, up = divmod(up, 86400)
+            h, up = divmod(up, 3600)
+            m, s = divmod(up, 60)
+            parts = []
+            if d:
+                parts.append(f"{d} hari")
+            if h:
+                parts.append(f"{h} jam")
+            if m:
+                parts.append(f"{m} mnt")
+            stats['uptime']['human'] = ' '.join(parts) or f"{s} dtk"
+        except (ValueError, TypeError, KeyError):
+            pass
+    return render_template('settings.html', brokers=user_brokers(), stats=stats,
+                           is_admin=_admin())
 
 @app.route('/settings/brokers', methods=['POST'])
 def settings_broker_add():
