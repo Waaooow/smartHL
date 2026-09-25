@@ -1,0 +1,46 @@
+{% set active = 'users' %}
+{% extends 'layout.html' %}
+{% block title %}Kelola {{ u.username }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <a href="{{ url_for('users_page') }}" style="color:rgba(255,255,255,.7); text-decoration:none;">← Pengguna</a>
+    <h1 style="margin-top:8px;">{{ u.display_name or u.username }}</h1>
+    <p><code>{{ u.username }}</code> · {{ u.ndev }} device · {% if u.is_admin %}admin{% else %}user{% endif %} · {% if u.is_active %}aktif{% else %}nonaktif{% endif %}</p>
+</div>
+<div class="card" style="max-width:520px;">
+    <form action="{{ url_for('users_update', id=u.id) }}" method="POST">
+        <div class="input-group">
+            <label>Nama tampilan</label>
+            <input type="text" name="display_name" value="{{ u.display_name or u.username }}" required>
+        </div>
+        {% if not me %}
+        <div class="input-group">
+            <label style="display:flex; gap:10px; align-items:center;">
+                <input type="checkbox" name="is_admin" value="1" {% if u.is_admin %}checked{% endif %} style="width:auto;"> Jadikan admin
+            </label>
+        </div>
+        <div class="input-group">
+            <label style="display:flex; gap:10px; align-items:center;">
+                <input type="checkbox" name="is_active" value="1" {% if u.is_active %}checked{% endif %} style="width:auto;"> Akun aktif (uncheck = blokir login)
+            </label>
+        </div>
+        {% else %}
+        <p style="font-size:.8rem; opacity:.7; margin-bottom:12px;">Role &amp; status akun sendiri tidak bisa diubah di sini.</p>
+        {% endif %}
+        <hr style="border:none; border-top:1px solid rgba(255,255,255,.15); margin:20px 0;">
+        <p style="font-size:.8rem; opacity:.7; margin-bottom:12px;">Reset password: kosongkan bila tidak diganti.</p>
+        <div class="input-group">
+            <label>Password baru (min. 4 karakter)</label>
+            <input type="password" name="new_password" placeholder="••••••">
+        </div>
+        <button class="btn-submit" type="submit">SIMPAN</button>
+    </form>
+</div>
+{% if not me %}
+<div class="card" style="max-width:520px; border-color:rgba(255,71,87,.4);">
+    <h3 style="margin-bottom:12px; color:#ff8a96;">Zona berbahaya</h3>
+    <p style="font-size:.85rem; opacity:.8; margin-bottom:12px;">Hapus user + <b>seluruh {{ u.ndev }} device dan datanya</b>. Tidak bisa dibatalkan.</p>
+    <a class="btn off" href="{{ url_for('users_delete', id=u.id) }}" onclick="return confirm('Hapus {{ u.username }} + semua device-nya?')">Hapus user ini</a>
+</div>
+{% endif %}
+{% endblock %}

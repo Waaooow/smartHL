@@ -22,9 +22,9 @@
             <tbody>
                 {% for u in users %}
                 <tr>
-                    <td data-label="Username"><code>{{ u.username }}</code></td>
+                    <td data-label="Username"><a href="{{ url_for('users_edit', id=u.id) }}"><code>{{ u.username }}</code></a></td>
                     <td data-label="Nama">{{ u.display_name or '—' }}</td>
-                    <td data-label="Role">{% if u.is_admin %}admin{% else %}user{% endif %}</td>
+                    <td data-label="Role">{% if u.is_admin %}admin{% else %}user{% endif %}{% if not u.is_active %} · <b>nonaktif</b>{% endif %}</td>
                     <td data-label="Device">{{ u.ndev }}</td>
                     <td data-label="Aksi">{% if u.id != session.get('user_id') %}<a class="btn danger" href="{{ url_for('users_delete', id=u.id) }}" onclick="return confirm('Hapus {{ u.username }} + SEMUA device-nya?')"><i class="fas fa-trash"></i></a>{% else %}—{% endif %}</td>
                 </tr>

@@ -88,6 +88,15 @@ def init_db():
     except Exception:
         pass
     try:
+        conn.execute('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1')
+    except Exception:
+        pass
+    try:
+        conn.execute("UPDATE users SET is_active=1 WHERE is_active IS NULL")
+        conn.commit()
+    except Exception:
+        pass
+    try:
         conn.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0')
     except Exception:
         pass
@@ -195,6 +204,10 @@ def login_action():
                          (generate_password_hash(password), user['id']))
             conn.commit()
     if user and ok:
+        if 'is_active' in user.keys() and not user['is_active']:
+            conn.close()
+            flash('Akun dinonaktifkan, hubungi admin', 'error')
+            return redirect(url_for('login_page'))
         session['logged_in'] = True
         session['user_id'] = user['id']
         session['display_name'] = user['display_name'] or user['username']
@@ -735,6 +748,70 @@ def users_delete(id):
     conn.close()
     flash('User + semua device-nya dihapus', 'success')
     return redirect(url_for('users_page'))
+
+@app.route('/users/<int:id>')
+def users_edit(id):
+    if not session.get('logged_in') or not _admin():
+        return redirect(url_for('dashboard'))
+    conn = get_db_connection()
+    u = conn.execute(
+        """SELECT u.*, (SELECT COUNT(*) FROM devices d WHERE d.owner_id=u.id) AS ndev
+           FROM users u WHERE u.id=?""", (id,)).fetchone()
+    conn.close()
+    if not u:
+        return redirect(url_for('users_page'))
+    return render_template('user_edit.html', u=dict(u), me=(id == session.get('user_id')))
+
+@app.route('/users/<int:id>', methods=['POST'])
+def users_update(id):
+    from werkzeug.security import generate_password_hash
+    if not session.get('logged_in') or not _admin():
+        return redirect(url_for('dashboard'))
+    me = (id == session.get('user_id'))
+    conn = get_db_connection()
+    u = conn.execute('SELECT * FROM users WHERE id=?', (id,)).fetchone()
+    if not u:
+        conn.close()
+        return redirect(url_for('users_page'))
+    name = (request.form.get('display_name') or '').strip() or u['username']
+    conn.execute('UPDATE users SET display_name=? WHERE id=?', (name, id))
+    if not me:
+        conn.execute('UPDATE users SET is_admin=?, is_active=? WHERE id=?',
+                     (1 if request.form.get('is_admin') else 0,
+                      1 if request.form.get('is_active') else 0, id))
+    new_pw = request.form.get('new_password') or ''
+    if new_pw:
+        if len(new_pw) < 4:
+            conn.close()
+            flash('Password baru minimal 4 karakter', 'error')
+            return redirect(url_for('users_edit', id=id))
+        conn.execute('UPDATE users SET password=? WHERE id=?',
+                     (generate_password_hash(new_pw), id))
+    conn.commit()
+    conn.close()
+    flash(f'User {u["username"]} disimpan' + (' (password direset)' if new_pw else ''), 'success')
+    return redirect(url_for('users_edit', id=id))
+
+@app.before_request
+def _refresh_session():
+    """Segarkan role/status tiap request; tendang sesi user yang dinonaktifkan/dihapus."""
+    if not session.get('logged_in'):
+        return
+    if request.path in ('/login', '/logout', '/health') or request.path.startswith('/static'):
+        return
+    conn = get_db_connection()
+    u = conn.execute('SELECT display_name, is_admin, is_active FROM users WHERE id=?',
+                     (session.get('user_id'),)).fetchone()
+    conn.close()
+    if not u or not u['is_active']:
+        session.clear()
+        if request.path.startswith('/api/'):
+            return jsonify({"error": "unauthorized"}), 401
+        flash('Akun dinonaktifkan', 'error')
+        return redirect(url_for('login_page'))
+    session['is_admin'] = bool(u['is_admin'])
+    if u['display_name']:
+        session['display_name'] = u['display_name']
 
 def _start_bridge_thread():
     try:
