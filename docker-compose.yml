@@ -1,12 +1,26 @@
 services:
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS:?isi DB_ROOT_PASS di .env}
+      MARIADB_DATABASE: ${DB_NAME:-smarthl}
+      MARIADB_USER: ${DB_USER:-smarthl}
+      MARIADB_PASSWORD: ${DB_PASS:?isi DB_PASS di .env}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASS}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   mosquitto:
     image: eclipse-mosquitto:2.0
     restart: unless-stopped
     ports:
-      # MQTT native (ESP32/ESP8266). JANGAN lewat Cloudflare proxy (orange cloud),
-      # pakai DNS-only (grey cloud) AAAA langsung ke IPv6 server.
+      # MQTT native (ESP). JANGAN lewat Cloudflare proxy; pakai DNS-only AAAA.
       - "${MQTT_PORT:-1883}:1883"
-      # WebSocket, untuk dashboard web / mqtt.js nanti.
       - "${MQTT_WS_PORT:-9001}:9001"
       # - "8883:8883"  # aktifkan setelah TLS diset di mosquitto.conf
     volumes:
@@ -16,28 +30,42 @@ services:
       - mosq-data:/mosquitto/data
       - mosq-log:/mosquitto/log
 
+  mqtt-dashboard:
+    # Dashboard khusus broker (klien, topik, statistik). Buka :8088,
+    # tambah koneksi ke host "mosquitto" port 1883 (user bridge / device).
+    image: cedalo/management-center:2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MQTT_MGMT_PORT:-8088}:8088"
+    depends_on:
+      - mosquitto
+
   app:
     build: .
     restart: unless-stopped
     ports:
-      # Di prod taruh di belakang reverse-proxy + TLS, cth:
-      # https://iot.alfins.my.id (Cloudflare proxy ON) -> 127.0.0.1:5000
+      # Prod: reverse-proxy + TLS di depan, cth https://iot.alfins.my.id -> :5000
       - "127.0.0.1:${APP_PORT:-5000}:5000"
     environment:
+      DB_TYPE: mariadb
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-smarthl}
+      DB_USER: ${DB_USER:-smarthl}
+      DB_PASS: ${DB_PASS:?isi DB_PASS di .env}
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
       MQTT_USER: bridge
-      MQTT_PASS: ${BRIDGE_PASSWORD:?isi BRIDGE_PASSWORD dari mosquitto/auth/bridge.env}
-      DB_PATH: /data/database.db
+      MQTT_PASS: ${BRIDGE_PASSWORD:?isi dari mosquitto/auth/bridge.env}
       RUN_BRIDGE: 1
-      SECRET_KEY: ${SECRET_KEY:?isi SECRET_KEY di file .env dulu}
-    volumes:
-      # SQLite persisten di luar container (aman dari recreate).
-      - smarthl-data:/data
+      SECRET_KEY: ${SECRET_KEY:?isi SECRET_KEY di .env}
     depends_on:
-      - mosquitto
+      mariadb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
 
 volumes:
+  mariadb-data:
   mosq-data:
   mosq-log:
-  smarthl-data:

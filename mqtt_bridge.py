@@ -5,33 +5,55 @@ Jalan bareng app.py (thread) atau standalone: python3 mqtt_bridge.py
 """
 import json
 import os
-import sqlite3
 import datetime
 import paho.mqtt.client as mqtt
+
+import db as dbmod
 
 BROKER_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
 BROKER_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 BROKER_USER = os.environ.get("MQTT_USER", "")
 BROKER_PASS = os.environ.get("MQTT_PASS", "")
-DB_PATH = os.environ.get("DB_PATH", "database.db")
+
+_client_cfgs = {}  # broker_id -> dict(host,port,user,pass)
+
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return dbmod.connect()
+
+
+def load_brokers():
+    """Koneksi broker aktif dari DB + pastikan default id=1 ada."""
+    conn = db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM broker_connections WHERE enabled=1 ORDER BY id").fetchall()
+    except Exception:
+        rows = []
+    if not any(r["id"] == 1 for r in rows):
+        rows = [{"id": 1, "name": "Broker bawaan", "host": BROKER_HOST,
+                 "port": BROKER_PORT, "username": BROKER_USER,
+                 "password": BROKER_PASS, "use_tls": 0}] + list(rows)
+    conn.close()
+    return rows
 
 def ensure_schema():
+    PK = dbmod.auto_pk()
     conn = db()
-    conn.execute("""CREATE TABLE IF NOT EXISTS telemetry (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS telemetry (
+        id {PK},
         device_id INTEGER,
         key TEXT NOT NULL,
         value REAL,
         ts DATETIME DEFAULT CURRENT_TIMESTAMP
     )""")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_tel_dev_ts ON telemetry(device_id, ts)")
-    conn.execute("""CREATE TABLE IF NOT EXISTS device_functions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    for idx in ['CREATE INDEX idx_tel_dev_ts ON telemetry(device_id, ts)']:
+        try:
+            conn.execute(idx)
+        except Exception:
+            pass
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS device_functions (
+        id {PK},
         device_id INTEGER NOT NULL,
         key TEXT NOT NULL,
         label TEXT NOT NULL,
@@ -40,8 +62,20 @@ def ensure_schema():
         pin TEXT DEFAULT '',
         sort INTEGER DEFAULT 0
     )""")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_func_dev_key ON device_functions(device_id, key)")
-    for col in ["mqtt_id TEXT", "token TEXT", "last_seen DATETIME"]:
+    try:
+        conn.execute("CREATE UNIQUE INDEX idx_func_dev_key ON device_functions(device_id, key)")
+    except Exception:
+        pass
+    try:
+        has = conn.execute('SELECT id FROM broker_connections WHERE id=1').fetchone()
+        if not has:
+            conn.execute(
+                'INSERT INTO broker_connections (id, user_id, name, host, port, ws_port, use_tls, enabled)'
+                ' VALUES (1, NULL, ?, ?, 1883, 9001, 0, 1)',
+                ('Broker bawaan (include)', BROKER_HOST))
+    except Exception:
+        pass
+    for col in ["mqtt_id TEXT", "token TEXT", "last_seen DATETIME", "broker_id INTEGER DEFAULT 1"]:
         try:
             conn.execute(f"ALTER TABLE devices ADD COLUMN {col}")
         except Exception:
@@ -51,8 +85,8 @@ def ensure_schema():
             conn.execute(f"ALTER TABLE device_functions ADD COLUMN {col}")
         except Exception:
             pass
-    conn.execute("""CREATE TABLE IF NOT EXISTS notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS notifications (
+        id {PK},
         device_id INTEGER,
         key TEXT DEFAULT '',
         title TEXT NOT NULL,
@@ -61,7 +95,26 @@ def ensure_schema():
         read INTEGER DEFAULT 0,
         ts DATETIME DEFAULT CURRENT_TIMESTAMP
     )""")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_notif_read_ts ON notifications(read, ts)")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS broker_connections (
+        id {PK},
+        user_id INTEGER,
+        name TEXT NOT NULL,
+        host TEXT NOT NULL,
+        port INTEGER DEFAULT 1883,
+        ws_port INTEGER DEFAULT 9001,
+        use_tls INTEGER DEFAULT 0,
+        username TEXT DEFAULT '',
+        password TEXT DEFAULT '',
+        enabled INTEGER DEFAULT 1
+    )""")
+    try:
+        conn.execute("CREATE INDEX idx_notif_read_ts ON notifications(read, ts)")
+    except Exception:
+        pass
+    try:
+        conn.execute('UPDATE devices SET broker_id=1 WHERE broker_id IS NULL')
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -81,8 +134,8 @@ def check_alerts(conn, dev_id, readings: dict):
         if not hit:
             continue
         recent = conn.execute(
-            """SELECT id FROM notifications WHERE device_id=? AND key=?
-               AND ts > datetime('now','-15 minutes') LIMIT 1""",
+            f"""SELECT id FROM notifications WHERE device_id=? AND key=?
+               AND ts > {dbmod.recent_minutes_sql(15)} LIMIT 1""",
             (dev_id, f["key"])).fetchone()
         if recent:
             continue
@@ -90,9 +143,10 @@ def check_alerts(conn, dev_id, readings: dict):
             "INSERT INTO notifications (device_id, key, title, message, level) VALUES (?,?,?,?,?)",
             (dev_id, f["key"], f"{f['label']}: {v}", f"Nilai {v} {hit}", "warning"))
 
-def handle_telemetry(mqtt_id, payload: dict):
+def handle_telemetry(broker_id, mqtt_id, payload: dict):
     conn = db()
-    row = conn.execute("SELECT * FROM devices WHERE mqtt_id=?", (mqtt_id,)).fetchone()
+    row = conn.execute("SELECT * FROM devices WHERE mqtt_id=? AND broker_id=?",
+                       (mqtt_id, broker_id)).fetchone()
     if not row:
         conn.close()
         return
@@ -114,50 +168,67 @@ def handle_telemetry(mqtt_id, payload: dict):
     conn.commit()
     conn.close()
 
-def on_connect(client, userdata, flags, reason_code, props=None):
-    print(f"[bridge] connected rc={reason_code}", flush=True)
-    client.subscribe("smarthl/+/up/telemetry", qos=0)
-    client.subscribe("smarthl/+/up/status", qos=0)
+def make_callbacks(broker_id):
+    def on_connect(client, userdata, flags, reason_code, props=None):
+        print(f"[bridge:{broker_id}] connected rc={reason_code}", flush=True)
+        client.subscribe("smarthl/+/up/telemetry", qos=0)
+        client.subscribe("smarthl/+/up/status", qos=0)
 
-def on_message(client, userdata, msg):
-    try:
-        parts = msg.topic.split("/")
-        # smarthl/{mqtt_id}/up/{kind}
-        if len(parts) != 4:
-            return
-        _, mqtt_id, _, kind = parts
-        payload_raw = msg.payload.decode(errors="ignore").strip()
-        if kind == "status":
-            conn = db()
-            st = "Online" if payload_raw == "online" else "Offline"
-            conn.execute("UPDATE devices SET status=? WHERE mqtt_id=?", (st, mqtt_id))
-            conn.commit()
-            conn.close()
-            return
-        if kind == "telemetry":
-            payload = json.loads(payload_raw)
-            if isinstance(payload, dict):
-                handle_telemetry(mqtt_id, payload)
-    except Exception as e:
-        print(f"[bridge] error: {e}", flush=True)
+    def on_message(client, userdata, msg):
+        try:
+            parts = msg.topic.split("/")
+            # smarthl/{mqtt_id}/up/{kind}
+            if len(parts) != 4:
+                return
+            _, mqtt_id, _, kind = parts
+            payload_raw = msg.payload.decode(errors="ignore").strip()
+            if kind == "status":
+                conn = db()
+                st = "Online" if payload_raw == "online" else "Offline"
+                conn.execute("UPDATE devices SET status=? WHERE mqtt_id=? AND broker_id=?",
+                             (st, mqtt_id, broker_id))
+                conn.commit()
+                conn.close()
+                return
+            if kind == "telemetry":
+                payload = json.loads(payload_raw)
+                if isinstance(payload, dict):
+                    handle_telemetry(broker_id, mqtt_id, payload)
+        except Exception as e:
+            print(f"[bridge:{broker_id}] error: {e}", flush=True)
+    return on_connect, on_message
 
-def main():
-    ensure_schema()
-    import os
+
+def run_broker(b):
     import uuid
-    cid = f"smarthl-bridge-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+    cid = f"smarthl-bridge-{b['id']}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
-    if BROKER_USER:
-        client.username_pw_set(BROKER_USER, BROKER_PASS)
+    if b.get("username"):
+        client.username_pw_set(b["username"], b.get("password") or "")
+    on_connect, on_message = make_callbacks(b["id"])
     client.on_connect = on_connect
     client.on_message = on_message
-    try:
-        from paho.mqtt.properties import PacketTypes  # noqa
-    except Exception:
-        pass
-    # LWT tidak perlu untuk bridge
-    client.connect(BROKER_HOST, BROKER_PORT, 60)
+    if b.get("use_tls"):
+        client.tls_set()
+    client.connect(b["host"], int(b.get("port") or 1883), 60)
     client.loop_forever()
+
+
+def main():
+    import threading
+    ensure_schema()
+    brokers = load_brokers()
+    if not brokers:
+        print("[bridge] tidak ada koneksi broker aktif", flush=True)
+        return
+    for b in brokers:
+        t = threading.Thread(target=run_broker, args=(b,), daemon=True,
+                             name=f"bridge-{b['id']}")
+        t.start()
+        print(f"[bridge] subscribe {b['name']} ({b['host']}:{b.get('port') or 1883})", flush=True)
+    for t in threading.enumerate():
+        if t.name.startswith("bridge-"):
+            t.join()
 
 if __name__ == "__main__":
     main()

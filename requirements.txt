@@ -3,3 +3,4 @@ paho-mqtt==2.1.0
 ping3==5.1.5
 wakeonlan==4.0.0
 gunicorn==23.0.0
+pymysql==1.1.1

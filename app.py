@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import os
-import sqlite3
 import secrets
 import json
 import threading
@@ -9,26 +8,53 @@ from ping3 import ping
 
 import paho.mqtt.client as mqtt
 
+import db as dbmod
+
+MQTT_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
+
 MQTT_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 MQTT_USER = os.environ.get("MQTT_USER", "")
 MQTT_PASS = os.environ.get("MQTT_PASS", "")
-DB_PATH = os.environ.get("DB_PATH", "database.db")
 
 _mqtt_client = None
 
-def mqtt_pub(topic, payload: dict):
-    global _mqtt_client
-    if _mqtt_client is None:
+_mqtt_clients = {}
+
+def get_broker(broker_id=1):
+    conn = get_db_connection()
+    b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (broker_id,)).fetchone()
+    conn.close()
+    return dict(b) if b else None
+
+def user_brokers():
+    """Broker bawaan + koneksi milik user (untuk dropdown & settings)."""
+    conn = get_db_connection()
+    rows = conn.execute(
+        'SELECT * FROM broker_connections WHERE id=1 OR user_id=? ORDER BY id',
+        (_uid(),)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def mqtt_pub(topic, payload: dict, broker_id=1):
+    global _mqtt_clients
+    if broker_id not in _mqtt_clients:
         import uuid
+        b = get_broker(broker_id) or {}
+        host = b.get('host') or MQTT_HOST
+        port = int(b.get('port') or MQTT_PORT)
+        user = b.get('username') or (MQTT_USER if broker_id == 1 else '')
+        pw = b.get('password') or (MQTT_PASS if broker_id == 1 else '')
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                        client_id=f"smarthl-web-{uuid.uuid4().hex[:6]}")
-        if MQTT_USER:
-            c.username_pw_set(MQTT_USER, MQTT_PASS)
-        c.connect(MQTT_HOST, MQTT_PORT, 60)
+                        client_id=f"smarthl-web-{broker_id}-{uuid.uuid4().hex[:6]}")
+        if user:
+            c.username_pw_set(user, pw)
+        if b.get('use_tls'):
+            c.tls_set()
+        c.connect(host, port, 60)
         c.loop_start()
-        _mqtt_client = c
-    _mqtt_client.publish(topic, json.dumps(payload))
+        _mqtt_clients[broker_id] = c
+    _mqtt_clients[broker_id].publish(topic, json.dumps(payload))
 
 # Kinds fungsi device. sensor = tampil saja, sisanya kirim perintah MQTT.
 FUNC_KINDS = ("sensor", "toggle", "button", "slider")
@@ -75,36 +101,90 @@ if app.secret_key == "smarthl_secret_key":
     print("[smarthl] WARNING: memakai SECRET_KEY default (ok untuk lokal, ganti di prod)", flush=True)
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return dbmod.connect()
 
 def init_db():
+    PK = dbmod.auto_pk()
     conn = get_db_connection()
-    # 1. Pastikan tabel utama ada
-    conn.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT)')
-    try:
-        conn.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
-    except Exception:
-        pass
-    try:
-        conn.execute('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1')
-    except Exception:
-        pass
+    # 1. Tabel utama (dibuat dulu, baru migrasi kolom — urutan penting untuk DB fresh)
+    conn.execute(f'CREATE TABLE IF NOT EXISTS users (id {PK}, username TEXT, password TEXT)')
+    conn.execute(f'''CREATE TABLE IF NOT EXISTS devices (
+            id {PK},
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            ip_address TEXT,
+            mac_address TEXT,
+            interface TEXT DEFAULT 'eth0',
+            status TEXT DEFAULT 'Offline'
+        )''')
+    conn.execute(f'''CREATE TABLE IF NOT EXISTS telemetry (
+        id {PK},
+        device_id INTEGER,
+        key TEXT NOT NULL,
+        value REAL,
+        ts DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute(f'''CREATE TABLE IF NOT EXISTS device_functions (
+        id {PK},
+        device_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'sensor',
+        unit TEXT DEFAULT '',
+        pin TEXT DEFAULT '',
+        sort INTEGER DEFAULT 0
+    )''')
+    conn.execute(f'''CREATE TABLE IF NOT EXISTS notifications (
+        id {PK},
+        device_id INTEGER,
+        key TEXT DEFAULT '',
+        title TEXT NOT NULL,
+        message TEXT DEFAULT '',
+        level TEXT DEFAULT 'info',
+        read INTEGER DEFAULT 0,
+        ts DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute(f'''CREATE TABLE IF NOT EXISTS broker_connections (
+        id {PK},
+        user_id INTEGER,
+        name TEXT NOT NULL,
+        host TEXT NOT NULL,
+        port INTEGER DEFAULT 1883,
+        ws_port INTEGER DEFAULT 9001,
+        use_tls INTEGER DEFAULT 0,
+        username TEXT DEFAULT '',
+        password TEXT DEFAULT '',
+        enabled INTEGER DEFAULT 1
+    )''')
+    for idx in ['CREATE INDEX idx_tel_dev_ts ON telemetry(device_id, ts)',
+                'CREATE UNIQUE INDEX idx_func_dev_key ON device_functions(device_id, key)',
+                'CREATE INDEX idx_notif_read_ts ON notifications(read, ts)',
+                'CREATE UNIQUE INDEX idx_devices_mqtt_unique ON devices(mqtt_id)']:
+        try:
+            conn.execute(idx)
+        except Exception:
+            pass  # sudah ada / duplikat nyata (cek manual)
+    for col in ['display_name TEXT', 'is_active INTEGER DEFAULT 1', 'is_admin INTEGER DEFAULT 0']:
+        try:
+            conn.execute(f'ALTER TABLE users ADD COLUMN {col}')
+        except Exception:
+            pass
+    for col in ['owner_id INTEGER', 'broker_id INTEGER DEFAULT 1',
+                'mqtt_id TEXT', 'token TEXT', 'last_seen DATETIME']:
+        try:
+            conn.execute(f'ALTER TABLE devices ADD COLUMN {col}')
+        except Exception:
+            pass
+    for col in ['alert_above REAL', 'alert_below REAL']:
+        try:
+            conn.execute(f'ALTER TABLE device_functions ADD COLUMN {col}')
+        except Exception:
+            pass
     try:
         conn.execute("UPDATE users SET is_active=1 WHERE is_active IS NULL")
-        conn.commit()
     except Exception:
         pass
-    try:
-        conn.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0')
-    except Exception:
-        pass
-    try:
-        conn.execute('ALTER TABLE devices ADD COLUMN owner_id INTEGER')
-    except Exception:
-        pass
-    # backfill: device tanpa pemilik -> admin pertama (atau user id 1)
+    # backfill pemilik -> admin pertama (atau user id 1)
     try:
         admin = conn.execute("SELECT id FROM users WHERE is_admin=1 ORDER BY id LIMIT 1").fetchone()
         if not admin:
@@ -115,69 +195,25 @@ def init_db():
     except Exception:
         pass
     try:
-        conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_unique ON devices(mqtt_id)')
+        conn.execute('UPDATE devices SET broker_id=1 WHERE broker_id IS NULL')
     except Exception:
-        pass  # NULL boleh ganda di SQLite; duplikat nyata akan gagal di sini bila ada
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS devices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL,
-            ip_address TEXT,
-            mac_address TEXT,
-            interface TEXT DEFAULT 'eth0',
-            status TEXT DEFAULT 'Offline'
-        )
-    ''')
-
-    # 2b. Skema IoT (Arduino-Cloud ala smartHL)
-    conn.execute('''CREATE TABLE IF NOT EXISTS telemetry (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_id INTEGER,
-        key TEXT NOT NULL,
-        value REAL,
-        ts DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_tel_dev_ts ON telemetry(device_id, ts)')
-    conn.execute('''CREATE TABLE IF NOT EXISTS device_functions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_id INTEGER NOT NULL,
-        key TEXT NOT NULL,
-        label TEXT NOT NULL,
-        kind TEXT NOT NULL DEFAULT 'sensor',
-        unit TEXT DEFAULT '',
-        pin TEXT DEFAULT '',
-        sort INTEGER DEFAULT 0
-    )''')
-    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_func_dev_key ON device_functions(device_id, key)')
-    for col in ['alert_above REAL', 'alert_below REAL']:
-        try:
-            conn.execute(f'ALTER TABLE device_functions ADD COLUMN {col}')
-        except Exception:
-            pass
-    # Notifikasi (fondasi alert sensor: smoke, movement, ambang, dsb.)
-    conn.execute('''CREATE TABLE IF NOT EXISTS notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_id INTEGER,
-        key TEXT DEFAULT '',
-        title TEXT NOT NULL,
-        message TEXT DEFAULT '',
-        level TEXT DEFAULT 'info',
-        read INTEGER DEFAULT 0,
-        ts DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_notif_read_ts ON notifications(read, ts)')
-    for col in ['mqtt_id TEXT', 'token TEXT', 'last_seen DATETIME']:
-        try:
-            conn.execute(f'ALTER TABLE devices ADD COLUMN {col}')
-        except Exception:
-            pass
+        pass
+    # broker bawaan (id=1, global). Host ikut env agar benar di lokal & compose.
+    try:
+        has = conn.execute('SELECT id FROM broker_connections WHERE id=1').fetchone()
+        if not has:
+            conn.execute(
+                'INSERT INTO broker_connections (id, user_id, name, host, port, ws_port, use_tls, enabled)'
+                ' VALUES (1, NULL, ?, ?, 1883, 9001, 0, 1)',
+                ('Broker bawaan (include)', os.environ.get('MQTT_HOST', '127.0.0.1')))
+    except Exception:
+        pass
 
     # 3. User dummy
     try:
         conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ('admin', 'admin123'))
     except: pass
-    
+
     conn.commit()
     conn.close()
 
@@ -263,8 +299,8 @@ def check_alerts(conn, device_id, readings: dict):
         if not hit:
             continue
         recent = conn.execute(
-            """SELECT id FROM notifications WHERE device_id=? AND key=?
-               AND ts > datetime('now','-15 minutes') LIMIT 1""",
+            f"""SELECT id FROM notifications WHERE device_id=? AND key=?
+               AND ts > {dbmod.recent_minutes_sql(15)} LIMIT 1""",
             (device_id, f['key'])).fetchone()
         if recent:
             continue
@@ -296,7 +332,7 @@ def dashboard():
         devices.append(dev)
     conn.close()
 
-    return render_template('dashboard.html', devices=devices)
+    return render_template('dashboard.html', devices=devices, brokers=user_brokers())
 
 @app.route('/add_device', methods=['POST'])
 def add_device():
@@ -313,8 +349,19 @@ def add_device():
         mqtt_id = 'shl-' + secrets.token_hex(4)
     token = secrets.token_hex(8)
     try:
-        conn.execute('INSERT INTO devices (name, type, ip_address, mac_address, interface, mqtt_id, token, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                     (name, dev_type, ip, mac, interface, mqtt_id, token, _uid()))
+        bid = int(request.form.get('broker_id') or 1)
+    except ValueError:
+        bid = 1
+    if bid != 1:
+        conn2 = get_db_connection()
+        ok = conn2.execute('SELECT id FROM broker_connections WHERE id=? AND user_id=?',
+                           (bid, _uid())).fetchone()
+        conn2.close()
+        if not ok and not _admin():
+            bid = 1
+    try:
+        conn.execute('INSERT INTO devices (name, type, ip_address, mac_address, interface, mqtt_id, token, owner_id, broker_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                     (name, dev_type, ip, mac, interface, mqtt_id, token, _uid(), bid))
         conn.commit()
     except Exception:
         conn.close()
@@ -366,7 +413,8 @@ def device_cmd(id):
         return redirect(url_for('dashboard'))
     led = request.form.get('led', '0')
     try:
-        mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {"led": int(led)})
+        mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {"led": int(led)},
+                 device.get('broker_id') or 1)
         flash(f"Perintah LED={led} dikirim ke {device['name']}", 'success')
     except Exception as e:
         flash(f"Gagal kirim MQTT: {e}", 'error')
@@ -426,7 +474,8 @@ def device_action(id):
         flash('Value harus angka', 'error')
         return redirect(url_for('device_detail', id=id))
     try:
-        mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {key: value})
+        mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {key: value},
+                 device.get('broker_id') or 1)
     except Exception as e:
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({"ok": False, "error": str(e)}), 502
@@ -812,6 +861,80 @@ def _refresh_session():
     session['is_admin'] = bool(u['is_admin'])
     if u['display_name']:
         session['display_name'] = u['display_name']
+
+@app.route('/settings')
+def settings_page():
+    """Koneksi broker milik user + info broker bawaan."""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    return render_template('settings.html', brokers=user_brokers())
+
+@app.route('/settings/brokers', methods=['POST'])
+def settings_broker_add():
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    name = (request.form.get('name') or '').strip() or 'Broker saya'
+    host = (request.form.get('host') or '').strip()
+    try:
+        port = max(1, min(65535, int(request.form.get('port') or 1883)))
+    except ValueError:
+        port = 1883
+    if not host:
+        flash('Host broker wajib diisi', 'error')
+        return redirect(url_for('settings_page'))
+    conn = get_db_connection()
+    conn.execute(
+        'INSERT INTO broker_connections (user_id, name, host, port, ws_port, use_tls, username, password, enabled)'
+        ' VALUES (?,?,?,?,?, ?,?,?,1)',
+        (_uid(), name, host, port, 9001,
+         1 if request.form.get('use_tls') else 0,
+         (request.form.get('username') or '').strip(),
+         request.form.get('password') or ''))
+    conn.commit()
+    conn.close()
+    flash(f'Broker {name} ditambah. Bridge subscribe otomatis (restart app bila perlu).', 'success')
+    return redirect(url_for('settings_page'))
+
+@app.route('/settings/brokers/<int:id>/delete')
+def settings_broker_delete(id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    if id == 1:
+        flash('Broker bawaan tidak bisa dihapus', 'error')
+        return redirect(url_for('settings_page'))
+    conn = get_db_connection()
+    b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone()
+    if not b or (b['user_id'] != _uid() and not _admin()):
+        conn.close()
+        return redirect(url_for('settings_page'))
+    n = conn.execute('SELECT COUNT(*) c FROM devices WHERE broker_id=?', (id,)).fetchone()['c']
+    if n:
+        conn.close()
+        flash(f'Masih dipakai {n} device, pindahkan dulu', 'error')
+        return redirect(url_for('settings_page'))
+    conn.execute('DELETE FROM broker_connections WHERE id=?', (id,))
+    conn.commit()
+    conn.close()
+    flash('Koneksi broker dihapus', 'success')
+    return redirect(url_for('settings_page'))
+
+@app.route('/settings/brokers/<int:id>/test')
+def settings_broker_test(id):
+    import socket
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone()
+    conn.close()
+    if not b or (b['user_id'] != _uid() and b['id'] != 1 and not _admin()):
+        return redirect(url_for('settings_page'))
+    try:
+        with socket.create_connection((b['host'], int(b['port'] or 1883)), timeout=5):
+            pass
+        flash(f"{b['name']}: TCP {b['host']}:{b['port']} TERHUBUNG", 'success')
+    except Exception as e:
+        flash(f"{b['name']}: gagal ({e})", 'error')
+    return redirect(url_for('settings_page'))
 
 def _start_bridge_thread():
     try:

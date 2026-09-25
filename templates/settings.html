@@ -1,0 +1,65 @@
+{% set active = 'settings' %}
+{% extends 'layout.html' %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>Settings</h1>
+    <p>Pilih broker mana yang dipakai. Default: broker bawaan yang ikut paket compose.</p>
+</div>
+<div class="card">
+    <div class="table-wrap">
+        <table class="data stack">
+            <thead><tr><th>Nama</th><th>Host</th><th>TLS</th><th>Auth</th><th></th></tr></thead>
+            <tbody>
+                {% for b in brokers %}
+                <tr>
+                    <td data-label="Nama"><b>{{ b.name }}</b>{% if b.id == 1 %} <span style="font-size:.75rem; opacity:.7;">(bawaan)</span>{% endif %}</td>
+                    <td data-label="Host"><code>{{ b.host }}:{{ b.port }}</code></td>
+                    <td data-label="TLS">{{ 'ya' if b.use_tls else 'tidak' }}</td>
+                    <td data-label="Auth">{% if b.username %}<code>{{ b.username }}</code>{% else %}—{% endif %}</td>
+                    <td data-label="Aksi">
+                        <a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_test', id=b.id) }}">Test</a>
+                        {% if b.id != 1 %}<a class="btn danger" href="{{ url_for('settings_broker_delete', id=b.id) }}" onclick="return confirm('Hapus koneksi {{ b.name }}?')"><i class="fas fa-trash"></i></a>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="card" style="max-width:560px;">
+    <h3 style="margin-bottom:12px;"><i class="fas fa-plug"></i> Tambah koneksi broker</h3>
+    <form action="{{ url_for('settings_broker_add') }}" method="POST">
+        <div class="input-group">
+            <label>Nama (cth: Broker kantor)</label>
+            <input type="text" name="name" placeholder="Broker kantor">
+        </div>
+        <div class="input-group">
+            <label>Host</label>
+            <input type="text" name="host" placeholder="192.168.1.50 atau mqtt.contoh.id" required>
+        </div>
+        <div class="input-group">
+            <label>Port MQTT</label>
+            <input type="number" name="port" value="1883" min="1" max="65535">
+        </div>
+        <div class="input-group">
+            <label>Username (kosongkan bila anonymous)</label>
+            <input type="text" name="username" placeholder="user">
+        </div>
+        <div class="input-group">
+            <label>Password</label>
+            <input type="password" name="password" placeholder="••••••">
+        </div>
+        <div class="input-group">
+            <label style="display:flex; gap:10px; align-items:center;">
+                <input type="checkbox" name="use_tls" value="1" style="width:auto;"> Pakai TLS
+            </label>
+        </div>
+        <button class="btn-submit" type="submit">SIMPAN</button>
+    </form>
+    <p style="font-size:.75rem; opacity:.65; margin-top:10px;">
+        Device memilih broker saat dibuat (dropdown di Tambah Perangkat). Bridge subscribe
+        semua koneksi aktif otomatis. Catatan: password broker eksternal disimpan apa adanya di DB.
+    </p>
+</div>
+{% endblock %}

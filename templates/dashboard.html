@@ -94,6 +94,16 @@
                 <label>MQTT ID (kosongkan = auto, cth: shl-demo01)</label>
                 <input type="text" name="mqtt_id" placeholder="shl-demo01">
             </div>
+            {% if brokers|length > 1 %}
+            <div class="input-group">
+                <label>Broker</label>
+                <select name="broker_id">
+                    {% for b in brokers %}
+                    <option value="{{ b.id }}" {% if b.id == 1 %}selected{% endif %}>{{ b.name }} ({{ b.host }}:{{ b.port }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
 
             <div id="pcFields" style="display: none;">
                 <div class="input-group">

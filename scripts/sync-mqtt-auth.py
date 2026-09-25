@@ -15,9 +15,11 @@ import argparse
 import os
 import secrets
 import shutil
-import sqlite3
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import db as dbmod
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -44,16 +46,22 @@ def main():
     if not passwd_bin:
         print("ERROR: mosquitto_passwd tidak ketemu (PATH / ~/mosquitto-root)", file=sys.stderr)
         return 1
+    if args.db:
+        dbmod.DB_PATH = args.db
 
     os.makedirs(args.out, mode=0o700, exist_ok=True)
     passwd_file = os.path.join(args.out, "passwd")
     acl_file = os.path.join(args.out, "acl")
     bridge_env = os.path.join(args.out, "bridge.env")
 
-    conn = sqlite3.connect(args.db)
-    conn.row_factory = sqlite3.Row
-    devs = conn.execute(
-        "SELECT mqtt_id, token FROM devices WHERE mqtt_id IS NOT NULL AND mqtt_id != ''").fetchall()
+    conn = dbmod.connect()
+    # Hanya device di broker bawaan (id=1); broker eksternal milik user-nya.
+    try:
+        devs = conn.execute(
+            "SELECT mqtt_id, token FROM devices WHERE mqtt_id IS NOT NULL AND mqtt_id != '' AND (broker_id=1 OR broker_id IS NULL)").fetchall()
+    except Exception:
+        devs = conn.execute(
+            "SELECT mqtt_id, token FROM devices WHERE mqtt_id IS NOT NULL AND mqtt_id != ''").fetchall()
     conn.close()
 
     # password bridge: buat sekali, simpan, pakai ulang

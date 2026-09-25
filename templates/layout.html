@@ -166,6 +166,7 @@
             <a href="{{ url_for('dashboard') }}" class="nav-item {% if active=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i> Dashboard</a>
             <a href="{{ url_for('devices_page') }}" class="nav-item {% if active=='devices' %}active{% endif %}"><i class="fas fa-microchip"></i> Perangkat</a>
             <a href="{{ url_for('kontrol_page') }}" class="nav-item {% if active=='kontrol' %}active{% endif %}"><i class="fas fa-sliders-h"></i> Kontrol</a>
+            <a href="{{ url_for('settings_page') }}" class="nav-item {% if active=='settings' %}active{% endif %}"><i class="fas fa-cog"></i> Settings</a>
             <a href="{{ url_for('notifications_page') }}" class="nav-item {% if active=='notifications' %}active{% endif %}"><i class="fas fa-bell"></i> Notifikasi <span class="badge hide" data-unread></span></a>
             {% if session.get('is_admin') %}
             <a href="{{ url_for('users_page') }}" class="nav-item {% if active=='users' %}active{% endif %}"><i class="fas fa-users"></i> Pengguna</a>

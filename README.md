@@ -41,19 +41,31 @@ kill -HUP $(pgrep -f 'mosquitto.*local.conf')   # lokal; di docker: compose rest
 * App/bridge publish sebagai user `bridge` (`MQTT_USER`/`MQTT_PASS`,
   password di `mosquitto/auth/bridge.env`, jangan commit).
 
-## Coba di prod server pakai container
+## 1 stack compose: app + MariaDB + Mosquitto + dashboard broker
 ```bash
-cp .env.example .env   # lalu isi SECRET_KEY random
+cp .env.example .env   # isi SECRET_KEY, DB_PASS, DB_ROOT_PASS, BRIDGE_PASSWORD
+python3 scripts/sync-mqtt-auth.py   # generate mosquitto/auth (butuh mosquitto_passwd;
+# di prod tanpa binary-nya: docker run --rm -v ./mosquitto/auth:/auth eclipse-mosquitto:2 mosquitto_passwd -b /auth/passwd <mqtt_id> <token>)
 docker compose up -d --build
-docker compose ps
 docker compose logs -f app
 ```
-* Dashboard: `http://<ip-server>:5000` (prod: taruh di belakang reverse-proxy + TLS,
-  cth `https://iot.alfins.my.id` via Cloudflare proxy ON → `127.0.0.1:5000`).
-* Broker MQTT: `<ip-server>:1883` (ESP), WebSocket `:9001`.
-* Data SQLite persisten di volume `smarthl-data` (`/data/database.db` di container).
-* Berhenti: `docker compose down` (data aman), hapus total: `docker compose down -v`.
-* WAJIB `workers=1` di CMD (sudah): bridge MQTT jalan sebagai thread dalam worker.
+* Dashboard: `http://<ip-server>:5000` (prod: reverse-proxy + TLS di depan,
+  cth `https://iot.alfins.my.id` via Cloudflare proxy ON).
+* Broker MQTT: `<ip-server>:1883`, WebSocket `:9001`.
+* Dashboard broker: `http://<ip-server>:8088` → tambah koneksi host `mosquitto:1883`.
+  (Image `cedalo/management-center` — konfigurasi via UI, belum live-test di sini;
+  fallback: metrik `$SYS` menyusul di Settings.)
+* Data di MariaDB (volume `mariadb-data`). Berhenti: `docker compose down`
+  (data aman), hapus total: `docker compose down -v`.
+* Lokal tanpa docker tetap bisa: default `DB_TYPE=sqlite`, Mosquitto via
+  `scripts/run-mosquitto.sh`, app via `scripts/run-app.sh`.
+* WAJIB `workers=1` di CMD gunicorn: bridge MQTT jalan sebagai thread.
+
+## Settings → koneksi broker per user
+
+Settings berisi broker bawaan (id=1, ikut paket) + koneksi milikmu (host/port/TLS/auth).
+Device memilih broker saat dibuat. Bridge subscribe semua koneksi aktif otomatis
+(butuh restart app agar thread baru ikut jalan). Tombol Test cek TCP saja.
 
 ## API
 - `GET /health`, `GET /device/<id>` (JSON, perlu login)
