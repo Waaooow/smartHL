@@ -41,14 +41,19 @@ kill -HUP $(pgrep -f 'mosquitto.*local.conf')   # lokal; di docker: compose rest
 * App/bridge publish sebagai user `bridge` (`MQTT_USER`/`MQTT_PASS`,
   password di `mosquitto/auth/bridge.env`, jangan commit).
 
-## 1 stack compose: app + MariaDB + Mosquitto + dashboard broker
+## 1 stack compose: app + MariaDB (+ Mosquitto opsional)
 ```bash
 cp .env.example .env   # isi SECRET_KEY, DB_PASS, DB_ROOT_PASS, BRIDGE_PASSWORD
-python3 scripts/sync-mqtt-auth.py   # generate mosquitto/auth (butuh mosquitto_passwd;
-# di prod tanpa binary-nya: docker run --rm -v ./mosquitto/auth:/auth eclipse-mosquitto:2 mosquitto_passwd -b /auth/passwd <mqtt_id> <token>)
+# Dashboard saja (pakai broker luar via Settings):
 docker compose up -d --build
+# Lengkap dengan broker bawaan:
+docker compose --profile broker up -d --build
 docker compose logs -f app
 ```
+Tanpa broker bawaan: matikan baris "Broker bawaan" di Settings (tombol power,
+khusus admin) agar bridge tidak retry terus. Device yang broker-nya broker
+bawaan akan gagal kirim (pesan error wajar) — pindahkan device ke broker luar
+atau ikutkan `--profile broker`.
 * Dashboard: `http://<ip-server>:5000` (prod: reverse-proxy + TLS di depan,
   cth `https://iot.alfins.my.id` via Cloudflare proxy ON).
 * Broker MQTT: `<ip-server>:1883`, WebSocket `:9001`.
@@ -61,6 +66,18 @@ docker compose logs -f app
 * Lokal tanpa docker tetap bisa: default `DB_TYPE=sqlite`, Mosquitto via
   `scripts/run-mosquitto.sh`, app via `scripts/run-app.sh`.
 * WAJIB `workers=1` di CMD gunicorn: bridge MQTT jalan sebagai thread.
+
+## Deploy non-docker (didokumentasikan, tidak disupport prioritaskan)
+
+```bash
+pip install -r requirements.txt
+./scripts/run-mosquitto.sh  # terminal 1 (butuh ~/mosquitto-root, lihat skrip)
+./scripts/run-app.sh        # terminal 2 (SQLite lokal, http://localhost:5000)
+```
+MariaDB non-docker: set `DB_TYPE=mariadb DB_HOST=... DB_USER=... DB_PASS=... DB_NAME=...`,
+jalankan sekali `RUN_BRIDGE=1 python3 -c "import app"` untuk init skema
+(lalu jalankan seperti biasa). Auth broker: `python3 scripts/sync-mqtt-auth.py`
+(butuh `mosquitto_passwd`) + restart mosquitto.
 
 ## Settings → koneksi broker per user
 

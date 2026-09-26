@@ -203,7 +203,8 @@ def init_db():
             conn.execute(idx)
         except Exception:
             pass  # sudah ada / duplikat nyata (cek manual)
-    for col in ['display_name TEXT', 'is_active INTEGER DEFAULT 1', 'is_admin INTEGER DEFAULT 0']:
+    for col in ['display_name TEXT', 'is_active INTEGER DEFAULT 1', 'is_admin INTEGER DEFAULT 0',
+                "lang TEXT DEFAULT 'id'"]:
         try:
             conn.execute(f'ALTER TABLE users ADD COLUMN {col}')
         except Exception:
@@ -287,6 +288,10 @@ def login_action():
         session['user_id'] = user['id']
         session['display_name'] = user['display_name'] or user['username']
         session['is_admin'] = bool(user['is_admin']) if 'is_admin' in user.keys() else (user['id'] == 1)
+        try:
+            session['lang'] = user['lang'] or 'id'
+        except Exception:
+            session['lang'] = 'id'
         conn.close()
         return redirect(url_for('dashboard'))
     conn.close()
@@ -1114,15 +1119,86 @@ def settings_broker_add():
         (_uid(), host)).fetchone()
     conn.close()
     # Langsung subscribe tanpa restart app (thread daemon di proses ini)
+    spawn_bridge(row)
+    flash(f'Broker {name} ditambah + bridge langsung subscribe.', 'success')
+    return redirect(url_for('settings_page'))
+
+def spawn_bridge(row):
+    """Jalankan thread bridge untuk satu koneksi (tanpa restart app)."""
     try:
         from mqtt_bridge import run_broker
         import threading
         threading.Thread(target=run_broker, args=(dict(row),),
                          daemon=True, name=f"bridge-{row['id']}").start()
         print(f"[smarthl] bridge thread utk broker {row['id']} dimulai", flush=True)
+        return True
     except Exception as e:
-        print(f"[smarthl] bridge baru gagal start (restart app): {e}", flush=True)
-    flash(f'Broker {name} ditambah + bridge langsung subscribe.', 'success')
+        print(f"[smarthl] bridge gagal start: {e}", flush=True)
+        return False
+
+@app.route('/settings/brokers/<int:id>/toggle')
+def settings_broker_toggle(id):
+    """Enable/disable koneksi (termasuk bawaan id=1 — khusus admin)."""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone()
+    if not b:
+        conn.close()
+        return redirect(url_for('settings_page'))
+    if id == 1 and not _admin():
+        conn.close()
+        flash('Hanya admin yang boleh menonaktifkan broker bawaan', 'error')
+        return redirect(url_for('settings_page'))
+    if b['user_id'] != _uid() and not _admin():
+        conn.close()
+        return redirect(url_for('settings_page'))
+    new = 0 if b['enabled'] else 1
+    conn.execute('UPDATE broker_connections SET enabled=? WHERE id=?', (new, id))
+    conn.commit()
+    row = dict(conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone())
+    conn.close()
+    if new:
+        spawn_bridge(row)
+        flash(f"{row['name']}: diaktifkan + langsung subscribe", 'success')
+    else:
+        flash(f"{row['name']}: dinonaktifkan (thread berhenti sendiri)", 'success')
+    return redirect(url_for('settings_page'))
+
+LANGS = {
+    'id': {},
+    'en': {'Dashboard': 'Dashboard', 'Perangkat': 'Devices', 'Kontrol': 'Control',
+           'Settings': 'Settings', 'Notifikasi': 'Notifications', 'Pengguna': 'Users',
+           'Profil': 'Profile', 'Keluar': 'Logout'},
+}
+# Kunci = label Indonesia; halaman selain navigasi masih Indonesia (bertahap).
+
+def _lang():
+    l = session.get('lang', 'id')
+    return l if l in LANGS else 'id'
+
+@app.context_processor
+def _inject_t():
+    table = LANGS.get(_lang(), {})
+    def t(s):
+        return table.get(s, s)
+    return {"t": t}
+
+@app.route('/settings/lang', methods=['POST'])
+def settings_lang():
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    lang = request.form.get('lang', 'id')
+    if lang not in LANGS:
+        lang = 'id'
+    session['lang'] = lang
+    conn = get_db_connection()
+    try:
+        conn.execute('UPDATE users SET lang=? WHERE id=?', (lang, session.get('user_id')))
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
     return redirect(url_for('settings_page'))
 
 @app.route('/settings/brokers/<int:id>/delete')

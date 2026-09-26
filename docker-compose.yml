@@ -16,6 +16,11 @@ services:
       retries: 10
 
   mosquitto:
+    # Opsional: hanya ikut bila diminta. Dashboard saja:
+    #   docker compose up -d --build
+    # Lengkap dengan broker bawaan:
+    #   docker compose --profile broker up -d --build
+    profiles: ["broker"]
     image: eclipse-mosquitto:2.0
     restart: unless-stopped
     ports:
@@ -56,8 +61,8 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
-      mosquitto:
-        condition: service_started
+      # mosquitto TIDAK di-depends_on: ia opsional (profile broker).
+      # Bridge retry sendiri bila broker belum/tidak ada.
 
 volumes:
   mariadb-data:

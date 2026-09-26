@@ -258,21 +258,59 @@ def make_callbacks(broker_id):
     return on_connect, on_message
 
 
+def is_enabled(bid):
+    try:
+        conn = db()
+        r = conn.execute('SELECT enabled FROM broker_connections WHERE id=?', (bid,)).fetchone()
+        conn.close()
+        return bool(r and r['enabled'])
+    except Exception:
+        return True
+
+
 def run_broker(b):
+    import threading
+    import time
     import uuid
-    cid = f"smarthl-bridge-{b['id']}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
-    user = b.get("username") or (BROKER_USER if b["id"] == 1 else "")
-    pw = b.get("password") or (BROKER_PASS if b["id"] == 1 else "")
-    if user:
-        client.username_pw_set(user, pw)
-    on_connect, on_message = make_callbacks(b["id"])
-    client.on_connect = on_connect
-    client.on_message = on_message
-    if b.get("use_tls"):
-        client.tls_set()
-    client.connect(b["host"], int(b.get("port") or 1883), 60)
-    client.loop_forever()
+    bid = b["id"]
+    client = None
+    while True:  # retry selamanya; berhenti rapi bila di-disable
+        try:
+            if not is_enabled(bid):
+                print(f"[bridge:{bid}] disabled, thread berhenti", flush=True)
+                return
+            cid = f"smarthl-bridge-{bid}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
+            user = b.get("username") or (BROKER_USER if bid == 1 else "")
+            pw = b.get("password") or (BROKER_PASS if bid == 1 else "")
+            if user:
+                client.username_pw_set(user, pw)
+            on_connect, on_message = make_callbacks(bid)
+            client.on_connect = on_connect
+            client.on_message = on_message
+            if b.get("use_tls"):
+                client.tls_set()
+            client.connect(b["host"], int(b.get("port") or 1883), 60)
+            break
+        except Exception as e:
+            print(f"[bridge:{bid}] {b.get('host')}: {e} — coba lagi 15 dtk", flush=True)
+            time.sleep(15)
+    client.loop_start()
+    try:
+        while True:
+            time.sleep(30)
+            if not is_enabled(bid):
+                try:
+                    client.disconnect()
+                except Exception:
+                    pass
+                print(f"[bridge:{bid}] disabled, putus", flush=True)
+                return
+    finally:
+        try:
+            client.loop_stop()
+        except Exception:
+            pass
 
 
 def main():

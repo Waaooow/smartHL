@@ -199,8 +199,8 @@
         <span id="userMenuTop">
             <button class="icon-btn" id="avatarTop" aria-label="Profil" style="padding:0; border:none; background:none;"><span class="avatar"><i class="fas fa-user"></i></span></button>
             <span class="dropdown" id="ddTop">
-                <a href="{{ url_for('profile_page') }}"><i class="fas fa-user-cog"></i> Profil</a>
-                <a href="/logout"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+                <a href="{{ url_for('profile_page') }}"><i class="fas fa-user-cog"></i> {{ t('Profil') }}</a>
+                <a href="/logout"><i class="fas fa-sign-out-alt"></i> {{ t('Keluar') }}</a>
             </span>
         </span>
     </div>
@@ -208,20 +208,20 @@
     <div class="sidebar" id="sidebar">
         <h2>smart<span>HL</span></h2>
         <ul class="nav-menu">
-            <a href="{{ url_for('dashboard') }}" class="nav-item {% if active=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i> Dashboard</a>
-            <a href="{{ url_for('devices_page') }}" class="nav-item {% if active=='devices' %}active{% endif %}"><i class="fas fa-microchip"></i> Perangkat</a>
-            <a href="{{ url_for('kontrol_page') }}" class="nav-item {% if active=='kontrol' %}active{% endif %}"><i class="fas fa-sliders-h"></i> Kontrol</a>
-            <a href="{{ url_for('settings_page') }}" class="nav-item {% if active=='settings' %}active{% endif %}"><i class="fas fa-cog"></i> Settings</a>
-            <a href="{{ url_for('notifications_page') }}" class="nav-item {% if active=='notifications' %}active{% endif %}"><i class="fas fa-bell"></i> Notifikasi <span class="badge hide" data-unread></span></a>
+            <a href="{{ url_for('dashboard') }}" class="nav-item {% if active=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i> {{ t('Dashboard') }}</a>
+            <a href="{{ url_for('devices_page') }}" class="nav-item {% if active=='devices' %}active{% endif %}"><i class="fas fa-microchip"></i> {{ t('Perangkat') }}</a>
+            <a href="{{ url_for('kontrol_page') }}" class="nav-item {% if active=='kontrol' %}active{% endif %}"><i class="fas fa-sliders-h"></i> {{ t('Kontrol') }}</a>
+            <a href="{{ url_for('settings_page') }}" class="nav-item {% if active=='settings' %}active{% endif %}"><i class="fas fa-cog"></i> {{ t('Settings') }}</a>
+            <a href="{{ url_for('notifications_page') }}" class="nav-item {% if active=='notifications' %}active{% endif %}"><i class="fas fa-bell"></i> {{ t('Notifikasi') }} <span class="badge hide" data-unread></span></a>
             {% if session.get('is_admin') %}
-            <a href="{{ url_for('users_page') }}" class="nav-item {% if active=='users' %}active{% endif %}"><i class="fas fa-users"></i> Pengguna</a>
+            <a href="{{ url_for('users_page') }}" class="nav-item {% if active=='users' %}active{% endif %}"><i class="fas fa-users"></i> {{ t('Pengguna') }}</a>
             {% endif %}
         </ul>
         <div class="user-card">
             <button class="user-btn" id="avatarSide"><span class="avatar"><i class="fas fa-user"></i></span><span>{{ session.get('display_name', 'Admin') }}</span></button>
             <div class="dropdown" id="ddSide">
-                <a href="{{ url_for('profile_page') }}"><i class="fas fa-user-cog"></i> Profil</a>
-                <a href="/logout"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+                <a href="{{ url_for('profile_page') }}"><i class="fas fa-user-cog"></i> {{ t('Profil') }}</a>
+                <a href="/logout"><i class="fas fa-sign-out-alt"></i> {{ t('Keluar') }}</a>
             </div>
         </div>
     </div>

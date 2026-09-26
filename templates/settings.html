@@ -28,14 +28,15 @@
             <thead><tr><th>Nama</th><th>Host</th><th>TLS</th><th>Auth</th><th></th></tr></thead>
             <tbody>
                 {% for b in brokers %}
-                <tr>
-                    <td data-label="Nama"><b>{{ b.name }}</b>{% if b.id == 1 %} <span style="font-size:.75rem; opacity:.7;">(bawaan)</span>{% endif %}{% if b.is_shared %} <span style="font-size:.75rem; background:rgba(76,209,55,.3); border-radius:8px; padding:2px 8px;">shared</span>{% endif %}</td>
+                <tr {% if not b.enabled %}style="opacity:.55;"{% endif %}>
+                    <td data-label="Nama"><b>{{ b.name }}</b>{% if b.id == 1 %} <span style="font-size:.75rem; opacity:.7;">(bawaan)</span>{% endif %}{% if b.is_shared %} <span style="font-size:.75rem; background:rgba(76,209,55,.3); border-radius:8px; padding:2px 8px;">shared</span>{% endif %}{% if not b.enabled %} <span style="font-size:.75rem; background:rgba(255,71,87,.35); border-radius:8px; padding:2px 8px;">mati</span>{% endif %}</td>
                     <td data-label="Host"><code>{{ b.host }}:{{ b.port }}</code></td>
                     <td data-label="TLS">{{ 'ya' if b.use_tls else 'tidak' }}</td>
                     <td data-label="Auth">{% if b.username %}<code>{{ b.username }}</code>{% else %}—{% endif %}</td>
                     <td data-label="Aksi">
                         <a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_test', id=b.id) }}">Test</a>
-                        {% if b.id != 1 %}<a class="btn danger" href="{{ url_for('settings_broker_delete', id=b.id) }}" onclick="return confirm('Hapus koneksi {{ b.name }}?')"><i class="fas fa-trash"></i></a>{% endif %}
+                        {% if b.user_id == session.get('user_id') or is_admin %}<a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_toggle', id=b.id) }}" title="{{ 'Matikan' if b.enabled else 'Nyalakan' }}"><i class="fas fa-power-off"></i></a>{% endif %}
+                        {% if b.id != 1 and (b.user_id == session.get('user_id') or is_admin) %}<a class="btn danger" href="{{ url_for('settings_broker_delete', id=b.id) }}" onclick="return confirm('Hapus koneksi {{ b.name }}?')"><i class="fas fa-trash"></i></a>{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -44,7 +45,9 @@
     </div>
 </div>
 <div class="card" style="max-width:560px;">
-    <h3 style="margin-bottom:12px;"><i class="fas fa-plug"></i> Tambah koneksi broker</h3>
+<details>
+    <summary style="cursor:pointer; font-weight:bold; font-size:1.05rem; list-style:none; display:flex; align-items:center; gap:10px;"><i class="fas fa-plug"></i> Tambah koneksi broker <span style="font-size:.75rem; opacity:.6;">(klik untuk buka/tutup)</span></summary>
+    <div style="margin-top:15px;">
     <form action="{{ url_for('settings_broker_add') }}" method="POST">
         <div class="input-group">
             <label>Nama (cth: Broker kantor)</label>
@@ -80,10 +83,23 @@
         {% endif %}
         <button class="btn-submit" type="submit">SIMPAN</button>
     </form>
+    </div>
+</details>
     <p style="font-size:.75rem; opacity:.65; margin-top:10px;">
         Device memilih broker saat dibuat (dropdown di Tambah Perangkat). Bridge subscribe
         semua koneksi aktif otomatis. Catatan: password broker eksternal disimpan apa adanya di DB.
         Koneksi <i>shared</i> (oleh admin) terlihat semua user.
     </p>
+</div>
+
+<div class="card" style="max-width:560px;">
+    <h3 style="margin-bottom:12px;"><i class="fas fa-language"></i> Bahasa / Language</h3>
+    <form action="{{ url_for('settings_lang') }}" method="POST" style="display:flex; gap:10px; align-items:center;">
+        <select name="lang" class="dd">
+            <option value="id" {% if session.get('lang', 'id') == 'id' %}selected{% endif %}>Indonesia</option>
+            <option value="en" {% if session.get('lang') == 'en' %}selected{% endif %}>English</option>
+        </select>
+        <button class="btn" type="submit">SIMPAN</button>
+    </form>
 </div>
 {% endblock %}
