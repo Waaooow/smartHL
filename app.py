@@ -28,13 +28,24 @@ def get_broker(broker_id=1):
     return dict(b) if b else None
 
 def user_brokers():
-    """Broker bawaan + koneksi milik user (untuk dropdown & settings)."""
+    """Broker bawaan + milik user + yang di-share admin (untuk dropdown & settings)."""
     conn = get_db_connection()
-    rows = conn.execute(
-        'SELECT * FROM broker_connections WHERE id=1 OR user_id=? ORDER BY id',
-        (_uid(),)).fetchall()
+    try:
+        if _admin():
+            rows = conn.execute('SELECT * FROM broker_connections ORDER BY id').fetchall()
+        else:
+            rows = conn.execute(
+                'SELECT * FROM broker_connections WHERE id=1 OR user_id=? OR is_shared=1 ORDER BY id',
+                (_uid(),)).fetchall()
+    except Exception:
+        rows = conn.execute(
+            'SELECT * FROM broker_connections WHERE id=1 OR user_id=? ORDER BY id',
+            (_uid(),)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+def visible_broker_ids():
+    return {b['id'] for b in user_brokers()}
 
 def mqtt_pub(topic, payload: dict, broker_id=1):
     global _mqtt_clients
@@ -156,6 +167,14 @@ def init_db():
         password TEXT DEFAULT '',
         enabled INTEGER DEFAULT 1
     )''')
+    try:
+        conn.execute('ALTER TABLE broker_connections ADD COLUMN is_shared INTEGER DEFAULT 0')
+    except Exception:
+        pass
+    try:
+        conn.execute('UPDATE broker_connections SET is_shared=0 WHERE is_shared IS NULL')
+    except Exception:
+        pass
     conn.execute(f'''CREATE TABLE IF NOT EXISTS broker_stats (
         id {PK},
         broker_id INTEGER NOT NULL,
@@ -170,7 +189,8 @@ def init_db():
     for idx in ['CREATE INDEX idx_tel_dev_ts ON telemetry(device_id, ts)',
                 'CREATE UNIQUE INDEX idx_func_dev_key ON device_functions(device_id, key)',
                 'CREATE INDEX idx_notif_read_ts ON notifications(read, ts)',
-                'CREATE UNIQUE INDEX idx_devices_mqtt_unique ON devices(mqtt_id)']:
+                'CREATE UNIQUE INDEX idx_devices_mqtt_unique ON devices(mqtt_id)',
+                'CREATE UNIQUE INDEX idx_users_username ON users(username)']:
         try:
             conn.execute(idx)
         except Exception:
@@ -366,13 +386,8 @@ def add_device():
         bid = int(request.form.get('broker_id') or 1)
     except ValueError:
         bid = 1
-    if bid != 1:
-        conn2 = get_db_connection()
-        ok = conn2.execute('SELECT id FROM broker_connections WHERE id=? AND user_id=?',
-                           (bid, _uid())).fetchone()
-        conn2.close()
-        if not ok and not _admin():
-            bid = 1
+    if bid not in visible_broker_ids():
+        bid = 1
     try:
         conn.execute('INSERT INTO devices (name, type, ip_address, mac_address, interface, mqtt_id, token, owner_id, broker_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                      (name, dev_type, ip, mac, interface, mqtt_id, token, _uid(), bid))
@@ -976,13 +991,27 @@ def settings_broker_add():
         flash('Host broker wajib diisi', 'error')
         return redirect(url_for('settings_page'))
     conn = get_db_connection()
+    try:
+        dup = conn.execute(
+            'SELECT id FROM broker_connections WHERE host=? AND port=?'
+            ' AND (id=1 OR user_id=? OR is_shared=1)',
+            (host, port, _uid())).fetchone()
+    except Exception:
+        dup = conn.execute(
+            'SELECT id FROM broker_connections WHERE host=? AND port=? AND (id=1 OR user_id=?)',
+            (host, port, _uid())).fetchone()
+    if dup:
+        conn.close()
+        flash('Broker itu sudah ada di daftar (cek host+port)', 'error')
+        return redirect(url_for('settings_page'))
+    shared = 1 if (_admin() and request.form.get('is_shared')) else 0
     conn.execute(
-        'INSERT INTO broker_connections (user_id, name, host, port, ws_port, use_tls, username, password, enabled)'
-        ' VALUES (?,?,?,?,?, ?,?,?,1)',
+        'INSERT INTO broker_connections (user_id, name, host, port, ws_port, use_tls, username, password, enabled, is_shared)'
+        ' VALUES (?,?,?,?,?, ?,?,?,1,?)',
         (_uid(), name, host, port, 9001,
          1 if request.form.get('use_tls') else 0,
          (request.form.get('username') or '').strip(),
-         request.form.get('password') or ''))
+         request.form.get('password') or '', shared))
     conn.commit()
     row = conn.execute(
         'SELECT * FROM broker_connections WHERE user_id=? AND host=? ORDER BY id DESC LIMIT 1',
@@ -1031,7 +1060,7 @@ def settings_broker_test(id):
     conn = get_db_connection()
     b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone()
     conn.close()
-    if not b or (b['user_id'] != _uid() and b['id'] != 1 and not _admin()):
+    if not b or id not in visible_broker_ids():
         return redirect(url_for('settings_page'))
     try:
         with socket.create_connection((b['host'], int(b['port'] or 1883)), timeout=5):

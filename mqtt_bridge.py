@@ -67,6 +67,10 @@ def ensure_schema():
     except Exception:
         pass
     try:
+        conn.execute("ALTER TABLE broker_connections ADD COLUMN is_shared INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
         has = conn.execute('SELECT id FROM broker_connections WHERE id=1').fetchone()
         if not has:
             conn.execute(

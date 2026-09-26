@@ -29,7 +29,7 @@
             <tbody>
                 {% for b in brokers %}
                 <tr>
-                    <td data-label="Nama"><b>{{ b.name }}</b>{% if b.id == 1 %} <span style="font-size:.75rem; opacity:.7;">(bawaan)</span>{% endif %}</td>
+                    <td data-label="Nama"><b>{{ b.name }}</b>{% if b.id == 1 %} <span style="font-size:.75rem; opacity:.7;">(bawaan)</span>{% endif %}{% if b.is_shared %} <span style="font-size:.75rem; background:rgba(76,209,55,.3); border-radius:8px; padding:2px 8px;">shared</span>{% endif %}</td>
                     <td data-label="Host"><code>{{ b.host }}:{{ b.port }}</code></td>
                     <td data-label="TLS">{{ 'ya' if b.use_tls else 'tidak' }}</td>
                     <td data-label="Auth">{% if b.username %}<code>{{ b.username }}</code>{% else %}—{% endif %}</td>
@@ -71,11 +71,19 @@
                 <input type="checkbox" name="use_tls" value="1" style="width:auto;"> Pakai TLS
             </label>
         </div>
+        {% if is_admin %}
+        <div class="input-group">
+            <label style="display:flex; gap:10px; align-items:center;">
+                <input type="checkbox" name="is_shared" value="1" style="width:auto;"> Share ke semua user (cth: broker publik bersama)
+            </label>
+        </div>
+        {% endif %}
         <button class="btn-submit" type="submit">SIMPAN</button>
     </form>
     <p style="font-size:.75rem; opacity:.65; margin-top:10px;">
         Device memilih broker saat dibuat (dropdown di Tambah Perangkat). Bridge subscribe
         semua koneksi aktif otomatis. Catatan: password broker eksternal disimpan apa adanya di DB.
+        Koneksi <i>shared</i> (oleh admin) terlihat semua user.
     </p>
 </div>
 {% endblock %}
