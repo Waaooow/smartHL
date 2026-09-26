@@ -47,7 +47,7 @@ def user_brokers():
 def visible_broker_ids():
     return {b['id'] for b in user_brokers()}
 
-def mqtt_pub(topic, payload: dict, broker_id=1):
+def mqtt_pub(topic, payload: dict, broker_id=1, retain=False):
     global _mqtt_clients
     if broker_id not in _mqtt_clients:
         import uuid
@@ -65,7 +65,7 @@ def mqtt_pub(topic, payload: dict, broker_id=1):
         c.connect(host, port, 60)
         c.loop_start()
         _mqtt_clients[broker_id] = c
-    _mqtt_clients[broker_id].publish(topic, json.dumps(payload))
+    _mqtt_clients[broker_id].publish(topic, json.dumps(payload), retain=retain)
 
 # Kinds fungsi device. sensor = tampil saja, sisanya kirim perintah MQTT.
 FUNC_KINDS = ("sensor", "toggle", "button", "slider")
@@ -105,6 +105,14 @@ def latest_values(conn, device_id, keys):
         if r:
             out[k] = {"value": r["value"], "ts": r["ts"]}
     return out
+
+def apply_desired(funcs, vals):
+    """Dashboard = acuan default: tampilkan desired bila ada, fallback telemetri."""
+    for f in funcs:
+        d = f.get('desired')
+        if d is not None:
+            vals[f['key']] = {"value": d, "ts": "default dashboard"}
+    return vals
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "smarthl_secret_key")
@@ -206,7 +214,7 @@ def init_db():
             conn.execute(f'ALTER TABLE devices ADD COLUMN {col}')
         except Exception:
             pass
-    for col in ['alert_above REAL', 'alert_below REAL']:
+    for col in ['alert_above REAL', 'alert_below REAL', 'desired REAL']:
         try:
             conn.execute(f'ALTER TABLE device_functions ADD COLUMN {col}')
         except Exception:
@@ -360,7 +368,7 @@ def dashboard():
         # Fungsi + nilai terakhir: kartu dashboard dinamis mengikuti device
         funcs = [dict(r) for r in ensure_functions(conn, dev)] if dev.get('mqtt_id') else []
         dev['funcs'] = funcs
-        dev['vals'] = latest_values(conn, dev['id'], [f['key'] for f in funcs])
+        dev['vals'] = apply_desired(funcs, latest_values(conn, dev['id'], [f['key'] for f in funcs]))
         dev['owner_name'] = owners.get(dev.get('owner_id'), '—')
         devices.append(dev)
     conn.close()
@@ -442,8 +450,17 @@ def device_cmd(id):
         return redirect(url_for('dashboard'))
     led = request.form.get('led', '0')
     try:
-        mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {"led": int(led)},
-                 device.get('broker_id') or 1)
+        v = int(led)
+        conn = get_db_connection()
+        try:
+            conn.execute('UPDATE device_functions SET desired=? WHERE device_id=? AND key=?',
+                         (v, id, 'led'))
+            conn.commit()
+        except Exception:
+            pass
+        conn.close()
+        mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {"led": v},
+                 device.get('broker_id') or 1, retain=True)
         flash(f"Perintah LED={led} dikirim ke {device['name']}", 'success')
     except Exception as e:
         flash(f"Gagal kirim MQTT: {e}", 'error')
@@ -477,7 +494,7 @@ def device_detail(id):
     for f in funcs:
         if f['key'] not in done:
             variables.append({"key": f['key'], "value": None, "ts": '—', "func": f})
-    vals = latest_values(conn, id, [f["key"] for f in funcs])
+    vals = apply_desired(funcs, latest_values(conn, id, [f["key"] for f in funcs]))
     # Riwayat: 1 key dipilih (default sensor pertama / key pertama)
     hist_key = (request.args.get('hist_key') or '').strip().lower()
     avail = [v['key'] for v in variables] or [f['key'] for f in funcs]
@@ -540,9 +557,24 @@ def device_action(id):
     except ValueError:
         flash('Value harus angka', 'error')
         return redirect(url_for('device_detail', id=id))
+    conn = get_db_connection()
+    func = conn.execute('SELECT kind FROM device_functions WHERE device_id=? AND key=?',
+                        (id, key)).fetchone()
+    kind = func['kind'] if func else 'toggle'
+    # Dashboard = sumber default: simpan desired + retain (kecuali button sesaat).
+    # Device yang baru boot menerima retained ini saat subscribe -> ikut dashboard.
+    retain = (kind != 'button')
+    if kind in ('toggle', 'slider'):
+        try:
+            conn.execute('UPDATE device_functions SET desired=? WHERE device_id=? AND key=?',
+                         (value, id, key))
+            conn.commit()
+        except Exception:
+            pass
+    conn.close()
     try:
         mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {key: value},
-                 device.get('broker_id') or 1)
+                 device.get('broker_id') or 1, retain=retain)
     except Exception as e:
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({"ok": False, "error": str(e)}), 502
@@ -693,7 +725,7 @@ def devices_page():
     for dev in devices:
         funcs = [dict(r) for r in ensure_functions(conn, dev)] if dev.get('mqtt_id') else []
         dev['funcs'] = funcs
-        dev['vals'] = latest_values(conn, dev['id'], [f['key'] for f in funcs])
+        dev['vals'] = apply_desired(funcs, latest_values(conn, dev['id'], [f['key'] for f in funcs]))
         dev['owner_name'] = owners.get(dev.get('owner_id'), '—')
     conn.close()
     return render_template('devices.html', devices=devices, is_admin=_admin())
@@ -711,7 +743,7 @@ def kontrol_page():
         ctrls = [f for f in funcs if f["kind"] in ("toggle", "button", "slider")]
         if ctrls:
             groups.append({"device": d, "funcs": ctrls,
-                           "vals": latest_values(conn, d["id"], [f["key"] for f in ctrls])})
+                           "vals": apply_desired(ctrls, latest_values(conn, d["id"], [f["key"] for f in ctrls]))})
     conn.close()
     return render_template('kontrol.html', groups=groups)
 
@@ -728,7 +760,7 @@ def kontrol_data():
         keys = [f["key"] for f in funcs]
         if keys:
             out.append({"device_id": d["id"], "status": d["status"],
-                        "vals": latest_values(conn, d["id"], keys)})
+                        "vals": apply_desired(funcs, latest_values(conn, d["id"], keys))})
     conn.close()
     return jsonify({"groups": out})
 

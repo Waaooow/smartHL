@@ -84,7 +84,7 @@ def ensure_schema():
             conn.execute(f"ALTER TABLE devices ADD COLUMN {col}")
         except Exception:
             pass
-    for col in ["alert_above REAL", "alert_below REAL"]:
+    for col in ["alert_above REAL", "alert_below REAL", "desired REAL"]:
         try:
             conn.execute(f"ALTER TABLE device_functions ADD COLUMN {col}")
         except Exception:

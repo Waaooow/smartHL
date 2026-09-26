@@ -18,6 +18,10 @@ Dua contoh siap-flash, protokolnya sama (dashboard tidak peduli board apa):
 3. Flash, buka Serial Monitor 115200. Harus muncul `WiFi... <ip>` lalu `MQTT connect...ok`.
 4. Di dashboard → Tambah Perangkat → tipe Sensor/Lampu → **MQTT ID persis sama**
    dengan langkah 2. Dalam ±5 detik status jadi Online + angka muncul.
+5. Dashboard adalah acuan default: tiap perintah toggle/slider dikirim sebagai
+   pesan **retained**. ESP yang baru boot langsung menerima perintah terakhir
+   saat subscribe — pin mengikuti dashboard otomatis. (Kind `button` sengaja
+   tidak di-retain agar tidak ke-trigger ulang tiap reboot.)
 5. Tambah fungsi sesuai hardware: `led` (toggle), `relay1` (toggle, pin GPIO5),
    `temp`/`hum`/`light` (sensor). Tombol di web langsung menggerakkan pin.
 
