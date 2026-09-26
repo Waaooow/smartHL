@@ -17,6 +17,8 @@
         <div class="func"><div class="val">{{ stats.get('msg_in', {}).get('value', '—') }}</div><div class="lbl">Pesan masuk</div></div>
         <div class="func"><div class="val">{{ stats.get('msg_out', {}).get('value', '—') }}</div><div class="lbl">Pesan keluar</div></div>
         <div class="func"><div class="val">{{ stats.get('pub_in', {}).get('value', '—') }} / {{ stats.get('pub_out', {}).get('value', '—') }}</div><div class="lbl">Publish in / out</div></div>
+        <div class="func"><div class="val">{{ stats.get('load_in', {}).get('value', '—') }} / {{ stats.get('load_out', {}).get('value', '—') }}</div><div class="lbl">Load msg/mnt in / out</div></div>
+        <div class="func"><div class="val">{{ stats.get('retained', {}).get('value', '—') }}</div><div class="lbl">Retained tersimpan</div></div>
     </div>
 </div>
 {% endif %}

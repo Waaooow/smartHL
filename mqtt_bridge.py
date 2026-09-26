@@ -193,6 +193,10 @@ SYS_MAP = {
     "bytes/sent": "bytes_out",
     "publish/messages/received": "pub_in",
     "publish/messages/sent": "pub_out",
+    "load/messages/received/1min": "load_in",
+    "load/messages/sent/1min": "load_out",
+    "store/messages/count": "retained",
+    "heap/current": "heap",
 }
 
 

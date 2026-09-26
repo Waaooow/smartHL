@@ -52,9 +52,10 @@ docker compose logs -f app
 * Dashboard: `http://<ip-server>:5000` (prod: reverse-proxy + TLS di depan,
   cth `https://iot.alfins.my.id` via Cloudflare proxy ON).
 * Broker MQTT: `<ip-server>:1883`, WebSocket `:9001`.
-* Dashboard broker: `http://<ip-server>:8088` → tambah koneksi host `mosquitto:1883`.
-  (Image `cedalo/management-center` — konfigurasi via UI, belum live-test di sini;
-  fallback: metrik `$SYS` menyusul di Settings.)
+* Dashboard broker: tab **Settings** (admin) → kartu live dari metrik `$SYS`
+  (uptime, klien, pesan, load, retained, versi). Tanpa service tambahan.
+  (Cedalo Management Center sempat dicoba tapi butuh lisensi — UI-nya crash
+  tanpa license — jadi dicabut dari compose.)
 * Data di MariaDB (volume `mariadb-data`). Berhenti: `docker compose down`
   (data aman), hapus total: `docker compose down -v`.
 * Lokal tanpa docker tetap bisa: default `DB_TYPE=sqlite`, Mosquitto via

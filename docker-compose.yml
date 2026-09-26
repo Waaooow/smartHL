@@ -30,16 +30,9 @@ services:
       - mosq-data:/mosquitto/data
       - mosq-log:/mosquitto/log
 
-  mqtt-dashboard:
-    # Dashboard khusus broker (klien, topik, statistik). Buka :8088,
-    # tambah koneksi ke host "mosquitto" port 1883 (user bridge / device).
-    image: cedalo/management-center:2
-    restart: unless-stopped
-    ports:
-      - "${MQTT_MGMT_PORT:-8088}:8088"
-    depends_on:
-      - mosquitto
-
+  # NOTE: dashboard broker grafis (ex-Cedalo) DICABUT — butuh lisensi,
+  # UI-nya crash tanpa license. Pengganti: kartu status $SYS di Settings
+  # (uptime, klien, pesan, load, retained) — tanpa service tambahan.
   app:
     build: .
     restart: unless-stopped
