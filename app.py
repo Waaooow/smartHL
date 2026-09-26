@@ -1201,6 +1201,44 @@ def settings_lang():
     conn.close()
     return redirect(url_for('settings_page'))
 
+@app.route('/settings/brokers/<int:id>/edit', methods=['POST'])
+def settings_broker_edit(id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone()
+    if not b or (b['user_id'] != _uid() and not _admin()):
+        conn.close()
+        return redirect(url_for('settings_page'))
+    name = (request.form.get('name') or '').strip() or b['name']
+    host = (request.form.get('host') or '').strip()
+    try:
+        port = max(1, min(65535, int(request.form.get('port') or b['port'] or 1883)))
+    except ValueError:
+        port = b['port'] or 1883
+    if not host:
+        conn.close()
+        flash('Host broker wajib diisi', 'error')
+        return redirect(url_for('settings_page'))
+    dup = conn.execute(
+        'SELECT id FROM broker_connections WHERE host=? AND port=? AND id!=? AND (id=1 OR user_id=? OR is_shared=1)',
+        (host, port, id, _uid())).fetchone()
+    if dup:
+        conn.close()
+        flash('Host+port itu sudah ada di daftar', 'error')
+        return redirect(url_for('settings_page'))
+    pw = request.form.get('password') or ''
+    conn.execute(
+        'UPDATE broker_connections SET name=?, host=?, port=?, use_tls=?, username=?'
+        + (', password=?' if pw else '') + ', is_shared=? WHERE id=?',
+        (name, host, port, 1 if request.form.get('use_tls') else 0,
+         (request.form.get('username') or '').strip()) +
+        ((pw,) if pw else ()) + ((1 if (_admin() and request.form.get('is_shared')) else 0), id))
+    conn.commit()
+    conn.close()
+    flash(f'Koneksi {name} disimpan. Berlaku penuh setelah restart app.', 'success')
+    return redirect(url_for('settings_page'))
+
 @app.route('/settings/brokers/<int:id>/delete')
 def settings_broker_delete(id):
     if not session.get('logged_in'):

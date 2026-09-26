@@ -23,6 +23,10 @@
 </div>
 {% endif %}
 <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <h3 style="margin:0;"><i class="fas fa-plug"></i> Koneksi broker</h3>
+        <button class="btn-add" style="padding:8px 16px; font-size:.85rem;" onclick="openBrokerModal()"><i class="fas fa-plus"></i> Add</button>
+    </div>
     <div class="table-wrap">
         <table class="data stack">
             <thead><tr><th>Nama</th><th>Host</th><th>TLS</th><th>Auth</th><th></th></tr></thead>
@@ -35,6 +39,10 @@
                     <td data-label="Auth">{% if b.username %}<code>{{ b.username }}</code>{% else %}—{% endif %}</td>
                     <td data-label="Aksi">
                         <a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_test', id=b.id) }}">Test</a>
+                        {% if b.user_id == session.get('user_id') or is_admin %}<button class="btn" style="padding:6px 12px; font-size:.8rem;" title="Setting koneksi"
+                            data-edit="{{ b.id }}" data-name="{{ b.name }}" data-host="{{ b.host }}" data-port="{{ b.port }}"
+                            data-username="{{ b.username }}" data-tls="{{ 1 if b.use_tls else 0 }}" data-shared="{{ 1 if b.is_shared else 0 }}"
+                            onclick="openBrokerModal(this)"><i class="fas fa-cog"></i></button>{% endif %}
                         {% if b.user_id == session.get('user_id') or is_admin %}<a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_toggle', id=b.id) }}" title="{{ 'Matikan' if b.enabled else 'Nyalakan' }}"><i class="fas fa-power-off"></i></a>{% endif %}
                         {% if b.id != 1 and (b.user_id == session.get('user_id') or is_admin) %}<a class="btn danger" href="{{ url_for('settings_broker_delete', id=b.id) }}" onclick="return confirm('Hapus koneksi {{ b.name }}?')"><i class="fas fa-trash"></i></a>{% endif %}
                     </td>
@@ -43,53 +51,56 @@
             </tbody>
         </table>
     </div>
-</div>
-<div class="card" style="max-width:560px;">
-<details>
-    <summary style="cursor:pointer; font-weight:bold; font-size:1.05rem; list-style:none; display:flex; align-items:center; gap:10px;"><i class="fas fa-plug"></i> Tambah koneksi broker <span style="font-size:.75rem; opacity:.6;">(klik untuk buka/tutup)</span></summary>
-    <div style="margin-top:15px;">
-    <form action="{{ url_for('settings_broker_add') }}" method="POST">
-        <div class="input-group">
-            <label>Nama (cth: Broker kantor)</label>
-            <input type="text" name="name" placeholder="Broker kantor">
-        </div>
-        <div class="input-group">
-            <label>Host</label>
-            <input type="text" name="host" placeholder="192.168.1.50 atau mqtt.contoh.id" required>
-        </div>
-        <div class="input-group">
-            <label>Port MQTT</label>
-            <input type="number" name="port" value="1883" min="1" max="65535">
-        </div>
-        <div class="input-group">
-            <label>Username (kosongkan bila anonymous)</label>
-            <input type="text" name="username" placeholder="user">
-        </div>
-        <div class="input-group">
-            <label>Password</label>
-            <input type="password" name="password" placeholder="••••••">
-        </div>
-        <div class="input-group">
-            <label style="display:flex; gap:10px; align-items:center;">
-                <input type="checkbox" name="use_tls" value="1" style="width:auto;"> Pakai TLS
-            </label>
-        </div>
-        {% if is_admin %}
-        <div class="input-group">
-            <label style="display:flex; gap:10px; align-items:center;">
-                <input type="checkbox" name="is_shared" value="1" style="width:auto;"> Share ke semua user (cth: broker publik bersama)
-            </label>
-        </div>
-        {% endif %}
-        <button class="btn-submit" type="submit">SIMPAN</button>
-    </form>
-    </div>
-</details>
     <p style="font-size:.75rem; opacity:.65; margin-top:10px;">
         Device memilih broker saat dibuat (dropdown di Tambah Perangkat). Bridge subscribe
-        semua koneksi aktif otomatis. Catatan: password broker eksternal disimpan apa adanya di DB.
+        semua koneksi aktif otomatis. Password broker eksternal disimpan apa adanya di DB.
         Koneksi <i>shared</i> (oleh admin) terlihat semua user.
     </p>
+</div>
+
+<div id="brokerModal">
+    <div class="modal-content card" style="text-align:left;">
+        <h3 id="brokerModalTitle" style="margin-bottom:20px; text-align:center;">Tambah koneksi broker</h3>
+        <form id="brokerForm" action="{{ url_for('settings_broker_add') }}" method="POST">
+            <div class="input-group">
+                <label>Nama (cth: Broker kantor)</label>
+                <input type="text" name="name" id="bfName" placeholder="Broker kantor">
+            </div>
+            <div class="input-group">
+                <label>Host</label>
+                <input type="text" name="host" id="bfHost" placeholder="192.168.1.50 atau mqtt.contoh.id" required>
+            </div>
+            <div class="input-group">
+                <label>Port MQTT</label>
+                <input type="number" name="port" id="bfPort" value="1883" min="1" max="65535">
+            </div>
+            <div class="input-group">
+                <label>Username (kosongkan bila anonymous)</label>
+                <input type="text" name="username" id="bfUser" placeholder="user">
+            </div>
+            <div class="input-group">
+                <label>Password <span id="bfPwHint" style="opacity:.6;"></span></label>
+                <input type="password" name="password" id="bfPass" placeholder="••••••">
+            </div>
+            <div class="input-group">
+                <label style="display:flex; gap:10px; align-items:center;">
+                    <input type="checkbox" name="use_tls" id="bfTls" value="1" style="width:auto;"> Pakai TLS
+                </label>
+            </div>
+            {% if is_admin %}
+            <div class="input-group">
+                <label style="display:flex; gap:10px; align-items:center;">
+                    <input type="checkbox" name="is_shared" id="bfShared" value="1" style="width:auto;"> Share ke semua user (cth: broker publik bersama)
+                </label>
+            </div>
+            {% endif %}
+            <button class="btn-submit" type="submit">SIMPAN</button>
+            <button type="button" onclick="closeBrokerModal()"
+                    style="background: transparent; color: white; border: none; margin-top: 10px; cursor: pointer; width: 100%;">
+                BATAL
+            </button>
+        </form>
+    </div>
 </div>
 
 <div class="card" style="max-width:560px;">
@@ -102,4 +113,42 @@
         <button class="btn" type="submit">SIMPAN</button>
     </form>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+    var ADD_URL = "{{ url_for('settings_broker_add') }}";
+    function openBrokerModal(btn) {
+        var form = document.getElementById('brokerForm');
+        var title = document.getElementById('brokerModalTitle');
+        if (btn && btn.getAttribute('data-edit')) {
+            title.textContent = 'Setting koneksi broker';
+            form.action = "/settings/brokers/" + btn.getAttribute('data-edit') + "/edit";
+            document.getElementById('bfName').value = btn.getAttribute('data-name') || '';
+            document.getElementById('bfHost').value = btn.getAttribute('data-host') || '';
+            document.getElementById('bfPort').value = btn.getAttribute('data-port') || '1883';
+            document.getElementById('bfUser').value = btn.getAttribute('data-username') || '';
+            document.getElementById('bfPass').value = '';
+            document.getElementById('bfTls').checked = btn.getAttribute('data-tls') === '1';
+            var sh = document.getElementById('bfShared');
+            if (sh) sh.checked = btn.getAttribute('data-shared') === '1';
+            document.getElementById('bfPwHint').textContent = '(kosongkan = tetap)';
+        } else {
+            title.textContent = 'Tambah koneksi broker';
+            form.action = ADD_URL;
+            form.reset();
+            document.getElementById('bfPort').value = '1883';
+            document.getElementById('bfPwHint').textContent = '';
+        }
+        document.getElementById('brokerModal').style.display = 'flex';
+    }
+    function closeBrokerModal() {
+        document.getElementById('brokerModal').style.display = 'none';
+    }
+    document.getElementById('brokerModal').addEventListener('click', function(e) {
+        if (e.target === this) closeBrokerModal();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeBrokerModal();
+    });
+</script>
 {% endblock %}
