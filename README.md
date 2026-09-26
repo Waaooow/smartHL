@@ -66,7 +66,7 @@ docker compose logs -f app
 
 Settings berisi broker bawaan (id=1, ikut paket) + koneksi milikmu (host/port/TLS/auth).
 Device memilih broker saat dibuat. Bridge subscribe semua koneksi aktif otomatis
-(butuh restart app agar thread baru ikut jalan). Tombol Test cek TCP saja.
+(koneksi baru langsung disubscribe, tanpa restart). Tombol Test cek TCP saja.
 
 ## API
 - `GET /health`, `GET /device/<id>` (JSON, perlu login)

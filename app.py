@@ -984,8 +984,20 @@ def settings_broker_add():
          (request.form.get('username') or '').strip(),
          request.form.get('password') or ''))
     conn.commit()
+    row = conn.execute(
+        'SELECT * FROM broker_connections WHERE user_id=? AND host=? ORDER BY id DESC LIMIT 1',
+        (_uid(), host)).fetchone()
     conn.close()
-    flash(f'Broker {name} ditambah. Bridge subscribe otomatis (restart app bila perlu).', 'success')
+    # Langsung subscribe tanpa restart app (thread daemon di proses ini)
+    try:
+        from mqtt_bridge import run_broker
+        import threading
+        threading.Thread(target=run_broker, args=(dict(row),),
+                         daemon=True, name=f"bridge-{row['id']}").start()
+        print(f"[smarthl] bridge thread utk broker {row['id']} dimulai", flush=True)
+    except Exception as e:
+        print(f"[smarthl] bridge baru gagal start (restart app): {e}", flush=True)
+    flash(f'Broker {name} ditambah + bridge langsung subscribe.', 'success')
     return redirect(url_for('settings_page'))
 
 @app.route('/settings/brokers/<int:id>/delete')
