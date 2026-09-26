@@ -77,7 +77,7 @@ void callback(char* topic, byte* payload, unsigned int len) {
 void reconnect() {
   while (!mqtt.connected()) {
     Serial.print("MQTT connect...");
-    if (mqtt.connect(MQTT_ID, MQTT_TOKEN, TOP_STATUS, 1, true, "offline")) {
+    if (mqtt.connect(MQTT_ID, MQTT_ID, MQTT_TOKEN, TOP_STATUS, 1, true, "offline", true)) {
       Serial.println("ok");
       mqtt.subscribe(TOP_DOWN);
       mqtt.publish(TOP_STATUS, "online", true);
