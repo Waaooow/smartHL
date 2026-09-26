@@ -67,6 +67,18 @@ atau ikutkan `--profile broker`.
   `scripts/run-mosquitto.sh`, app via `scripts/run-app.sh`.
 * WAJIB `workers=1` di CMD gunicorn: bridge MQTT jalan sebagai thread.
 
+## Keamanan (ringkas)
+
+* Semua aksi ubah-data wajib POST + token CSRF (form biasa otomatis, AJAX via header).
+* Login dibatasi (8x gagal/5 mnt per IP); cookie HttpOnly + SameSite Lax
+  (set `SECURE_COOKIES=1` bila sudah HTTPS).
+* MQTT ID divalidasi `^[a-z0-9_-]{3,24}$` (cegah wildcard injection ke ACL).
+* Password broker eksternal terenkripsi (Fernet, kunci = SECRET_KEY).
+  Ganti SECRET_KEY = password itu tak terbaca lagi.
+* Container jalan sebagai `appuser` (non-root). Telemetri lama diprune
+  (`TELEMETRY_RETENTION_DAYS`, default 90). Backup: `scripts/backup.sh`
+  (cron harian disarankan).
+
 ## Deploy non-docker (didokumentasikan, tidak disupport prioritaskan)
 
 ```bash

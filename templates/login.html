@@ -139,6 +139,7 @@
         {% endwith %}
 
         <form action="/login" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="input-group">
                 <label>Username</label>
                 <input name="username" type="text" placeholder="Masukkan username" required>

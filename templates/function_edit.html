@@ -41,6 +41,6 @@
     </form>
 </div>
 <div class="card" style="max-width:520px; border-color:rgba(255,71,87,.4);">
-    <a class="btn off" href="{{ url_for('delete_function', fid=f.id) }}" onclick="return confirm('Hapus fungsi {{ f.key }}?')">Hapus fungsi ini</a>
+    <form action="{{ url_for('delete_function', fid=f.id) }}" method="POST" onsubmit="return confirm(&quot;Hapus fungsi {{ f.key }}?&quot;)"><button class="btn off" type="submit">Hapus fungsi ini</button></form>
 </div>
 {% endblock %}

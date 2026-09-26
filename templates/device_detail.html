@@ -112,7 +112,7 @@
                         {% else %}<span style="color:#ffd166;">baru terdeteksi</span>{% endif %}
                     </td>
                     <td data-label="Aksi">
-                        {% if v.func %}<a class="btn danger" href="{{ url_for('edit_function', fid=v.func.id) }}"><i class="fas fa-pen"></i></a> <a class="btn danger" href="{{ url_for('delete_function', fid=v.func.id) }}" onclick="return confirm('Hapus fungsi {{ v.key }}?')"><i class="fas fa-trash"></i></a>
+                        {% if v.func %}<a class="btn danger" href="{{ url_for('edit_function', fid=v.func.id) }}"><i class="fas fa-pen"></i></a> <form action="{{ url_for('delete_function', fid=v.func.id) }}" method="POST" style="display:inline;" onsubmit="return confirm(&quot;Hapus fungsi {{ v.key }}?&quot;)"><button type="submit" class="btn danger"><i class="fas fa-trash"></i></button></form>
                         {% else %}<form action="{{ url_for('quick_function', id=device.id) }}" method="POST" style="display:inline;">
                             <input type="hidden" name="key" value="{{ v.key }}">
                             <button class="btn" style="padding:6px 12px; font-size:.8rem;" type="submit" title="Daftarkan sebagai fungsi sensor">+ Jadikan fungsi</button>
@@ -192,7 +192,7 @@
       var key = fd.get('key');
       lockKey(key);
       applyVal(key, fd.get('value'));
-      fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}})
+      fetch(f.action, {method: 'POST', body: fd, headers: Object.assign({'X-Requested-With': 'fetch'}, csrfHeaders())})
         .then(function(r) { return r.json(); })
         .then(function(j) {
           if (j.ok) { flashMsg('Terkirim: ' + j.key + '=' + j.value, true); }
@@ -203,7 +203,7 @@
   });
   async function poll() {
     try {
-      var r = await fetch('/device/' + DEV_ID + '/data', {headers: {'X-Requested-With': 'fetch'}});
+      var r = await fetch('/device/' + DEV_ID + '/data', {headers: Object.assign({'X-Requested-With': 'fetch'}, csrfHeaders())});
       if (!r.ok) return;
       var j = await r.json();
       var latest = {};

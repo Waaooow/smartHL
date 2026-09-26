@@ -93,7 +93,7 @@
       var devEl = f.querySelector('[data-dev]');
       var dev = devEl ? devEl.getAttribute('data-dev') : '';
       applyVal(dev, key, fd.get('value'));
-      fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}})
+      fetch(f.action, {method: 'POST', body: fd, headers: Object.assign({'X-Requested-With': 'fetch'}, csrfHeaders())})
         .then(function(r) { return r.json(); })
         .then(function(j) {
           if (j.ok) { window.showToast('Terkirim: ' + j.key + '=' + j.value, true); }
@@ -104,7 +104,7 @@
   });
   async function poll() {
     try {
-      var r = await fetch('/kontrol/data', {headers: {'X-Requested-With': 'fetch'}});
+      var r = await fetch('/kontrol/data', {headers: Object.assign({'X-Requested-With': 'fetch'}, csrfHeaders())});
       if (!r.ok) return;
       var j = await r.json();
       (j.groups || []).forEach(function(g) {

@@ -40,7 +40,7 @@
 <div class="card" style="max-width:520px; border-color:rgba(255,71,87,.4);">
     <h3 style="margin-bottom:12px; color:#ff8a96;">Zona berbahaya</h3>
     <p style="font-size:.85rem; opacity:.8; margin-bottom:12px;">Hapus user + <b>seluruh {{ u.ndev }} device dan datanya</b>. Tidak bisa dibatalkan.</p>
-    <a class="btn off" href="{{ url_for('users_delete', id=u.id) }}" onclick="return confirm('Hapus {{ u.username }} + semua device-nya?')">Hapus user ini</a>
+    <form action="{{ url_for('users_delete', id=u.id) }}" method="POST" onsubmit="return confirm(&quot;Hapus {{ u.username }} + semua device-nya?&quot;)"><button class="btn off" type="submit">Hapus user ini</button></form>
 </div>
 {% endif %}
 {% endblock %}

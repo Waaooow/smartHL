@@ -58,6 +58,8 @@ services:
       MQTT_PASS: ${BRIDGE_PASSWORD:?isi dari mosquitto/auth/bridge.env}
       RUN_BRIDGE: 1
       SECRET_KEY: ${SECRET_KEY:?isi SECRET_KEY di .env}
+      SECURE_COOKIES: ${SECURE_COOKIES:-0}
+      TELEMETRY_RETENTION_DAYS: ${TELEMETRY_RETENTION_DAYS:-90}
     depends_on:
       mariadb:
         condition: service_healthy

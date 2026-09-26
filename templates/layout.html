@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>smartHL - {% block title %}Dashboard{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',sans-serif; }
@@ -243,6 +244,24 @@
     </div>
 <script>
 (function() {
+  // CSRF: semua form POST biasa otomatis disisipi token
+  document.addEventListener('submit', function(e) {
+    var f = e.target;
+    if (!f || f.tagName !== 'FORM' || (f.method || 'get').toLowerCase() !== 'post') return;
+    if (f.querySelector('input[name=csrf_token]')) return;
+    var meta = document.querySelector('meta[name=csrf-token]');
+    if (!meta) return;
+    var h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'csrf_token'; h.value = meta.content;
+    f.appendChild(h);
+  });
+  function csrfHeaders(h) {
+    h = h || {};
+    var meta = document.querySelector('meta[name=csrf-token]');
+    if (meta) h['X-CSRFToken'] = meta.content;
+    return h;
+  }
+
   // Drawer mobile
   var sb = document.getElementById('sidebar');
   var tg = document.getElementById('navToggle');
@@ -320,7 +339,7 @@
         var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = n.ts;
         d.append(t, m, ts);
         d.addEventListener('click', function() {
-          fetch('/api/notifications/read', {method: 'POST'}).then(refreshBadge);
+          fetch('/api/notifications/read', {method: 'POST', headers: csrfHeaders()}).then(refreshBadge);
           d.classList.remove('unread');
         });
         list.appendChild(d);

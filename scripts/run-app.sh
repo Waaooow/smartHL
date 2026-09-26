@@ -1,5 +1,6 @@
 #!/bin/bash
-# Jalankan backend Flask + bridge (butuh mosquitto jalan dulu)
+# DEV SAJA: debug server + reloader. JANGAN menghadap LAN/internet
+# (debugger PIN interaktif = eksekusi kode jarak jauh). Prod pakai compose.
 set -e
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.local/bin:$PATH"

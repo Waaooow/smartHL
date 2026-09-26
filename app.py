@@ -55,7 +55,7 @@ def mqtt_pub(topic, payload: dict, broker_id=1, retain=False):
         host = b.get('host') or MQTT_HOST
         port = int(b.get('port') or MQTT_PORT)
         user = b.get('username') or (MQTT_USER if broker_id == 1 else '')
-        pw = b.get('password') or (MQTT_PASS if broker_id == 1 else '')
+        pw = dbmod.dec_pw(b.get('password')) or (MQTT_PASS if broker_id == 1 else '')
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                         client_id=f"smarthl-web-{broker_id}-{uuid.uuid4().hex[:6]}")
         if user:
@@ -118,6 +118,59 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "smarthl_secret_key")
 if app.secret_key == "smarthl_secret_key":
     print("[smarthl] WARNING: memakai SECRET_KEY default (ok untuk lokal, ganti di prod)", flush=True)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("SECURE_COOKIES") == "1",
+)
+
+import hmac as _hmac
+import hashlib as _hashlib
+import time as _time
+from functools import wraps as _wraps
+
+
+def csrf_token():
+    if "_csrf" not in session:
+        session["_csrf"] = secrets.token_hex(16)
+    return _hmac.new(app.secret_key.encode(), session["_csrf"].encode(),
+                     _hashlib.sha256).hexdigest()
+
+
+def _csrf_ok():
+    tok = request.form.get("csrf_token", "") or request.headers.get("X-CSRFToken", "")
+    exp = _hmac.new(app.secret_key.encode(), session.get("_csrf", "").encode(),
+                    _hashlib.sha256).hexdigest()
+    return bool(tok) and _hmac.compare_digest(tok, exp)
+
+
+def csrf_protect(f):
+    @_wraps(f)
+    def w(*a, **kw):
+        if request.method != "POST" or not _csrf_ok():
+            if request.headers.get("X-Requested-With") == "fetch":
+                return jsonify({"ok": False, "error": "csrf rejected"}), 403
+            flash(L("Aksi ditolak (CSRF). Muat ulang halaman."), "error")
+            return redirect(request.referrer or url_for("dashboard"))
+        return f(*a, **kw)
+    return w
+
+
+_hits = {}
+
+
+def rate_ok(key, limit=8, window=300):
+    now = _time.time()
+    arr = [t for t in _hits.get(key, []) if now - t < window]
+    if len(arr) >= limit:
+        return False
+    arr.append(now)
+    _hits[key] = arr
+    return True
+
+
+def rate_clear(key):
+    _hits.pop(key, None)
 
 def get_db_connection():
     return dbmod.connect()
@@ -262,8 +315,13 @@ def login_page():
     return render_template('login.html')
 
 @app.route('/login', methods=['POST'])
+@csrf_protect
 def login_action():
     from werkzeug.security import check_password_hash, generate_password_hash
+    ip = request.remote_addr or 'unknown'
+    if not rate_ok(f'login:{ip}'):
+        flash(L('Terlalu banyak percobaan. Tunggu 5 menit.'), 'error')
+        return redirect(url_for('login_page'))
     username = request.form['username']
     password = request.form['password']
     conn = get_db_connection()
@@ -284,6 +342,7 @@ def login_action():
             conn.close()
             flash(L('Akun dinonaktifkan, hubungi admin'), 'error')
             return redirect(url_for('login_page'))
+        rate_clear(f'login:{request.remote_addr or "unknown"}')
         session['logged_in'] = True
         session['user_id'] = user['id']
         session['display_name'] = user['display_name'] or user['username']
@@ -382,6 +441,7 @@ def dashboard():
                            is_admin=_admin())
 
 @app.route('/add_device', methods=['POST'])
+@csrf_protect
 def add_device():
     name = request.form['name']
     dev_type = request.form.get('type') or 'Controller'
@@ -389,6 +449,10 @@ def add_device():
     mac = request.form.get('mac_address')
     interface = request.form.get('interface', 'eth0') # Ambil input interface
     mqtt_id = request.form.get('mqtt_id') or ('shl-' + secrets.token_hex(3))
+    import re as _re
+    if not _re.fullmatch(r'[a-z0-9_-]{3,24}', mqtt_id):
+        flash(L('MQTT ID hanya huruf kecil/angka/_/- (3-24 karakter)'), 'error')
+        return redirect(url_for('dashboard'))
     # mqtt_id unik sederhana
     conn = get_db_connection()
     exists = conn.execute('SELECT id FROM devices WHERE mqtt_id=?', (mqtt_id,)).fetchone()
@@ -413,7 +477,8 @@ def add_device():
     flash(L('Device {name} dibuat. MQTT ID: {mqtt_id}', name=name, mqtt_id=mqtt_id), 'success')
     return redirect(url_for('dashboard'))
 
-@app.route('/wol/<int:id>')
+@app.route('/wol/<int:id>', methods=['POST'])
+@csrf_protect
 def wake_device(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -430,7 +495,8 @@ def wake_device(id):
             flash(L('Gagal mengirim WoL: {e}', e=str(e)), 'error')
     return redirect(url_for('dashboard'))
 
-@app.route('/delete_device/<int:id>')
+@app.route('/delete_device/<int:id>', methods=['POST'])
+@csrf_protect
 def delete_device(id):
     conn = get_db_connection()
     if not owned_device(conn, id):
@@ -444,6 +510,7 @@ def delete_device(id):
     return redirect(url_for('dashboard'))
 
 @app.route('/device/<int:id>/cmd', methods=['POST'])
+@csrf_protect
 def device_cmd(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -542,6 +609,7 @@ def device_data(id):
     return jsonify({"device": dict(device), "telemetry": [dict(r) for r in rows]})
 
 @app.route('/device/<int:id>/action', methods=['POST'])
+@csrf_protect
 def device_action(id):
     """Aksi generik: kirim {key: value} ke smarthl/{mqtt_id}/down/cmd."""
     if not session.get('logged_in'):
@@ -591,6 +659,7 @@ def device_action(id):
     return redirect(request.form.get('next') or url_for('device_detail', id=id))
 
 @app.route('/device/<int:id>/functions', methods=['POST'])
+@csrf_protect
 def add_function(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -645,6 +714,7 @@ def edit_function(fid):
     return render_template('function_edit.html', f=dict(f), device=dev)
 
 @app.route('/functions/<int:fid>/edit', methods=['POST'])
+@csrf_protect
 def update_function(fid):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -679,6 +749,7 @@ def update_function(fid):
     return redirect(url_for('device_detail', id=f['device_id']))
 
 @app.route('/device/<int:id>/functions/quick', methods=['POST'])
+@csrf_protect
 def quick_function(id):
     """Jadikan key terdeteksi sebagai fungsi (kind sensor, label = key)."""
     if not session.get('logged_in'):
@@ -704,7 +775,8 @@ def quick_function(id):
     conn.close()
     return redirect(url_for('device_detail', id=id))
 
-@app.route('/functions/<int:fid>/delete')
+@app.route('/functions/<int:fid>/delete', methods=['POST'])
+@csrf_protect
 def delete_function(fid):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -775,6 +847,8 @@ def api_telemetry():
     data = request.get_json(force=True, silent=True) or {}
     mqtt_id = data.get('mqtt_id')
     token = request.headers.get('X-Token', '')
+    if not rate_ok(f"api:{request.remote_addr or 'unknown'}:{mqtt_id}", limit=30, window=60):
+        return jsonify({"error": "rate limited"}), 429
     if not mqtt_id:
         return jsonify({"error": "mqtt_id required"}), 400
     conn = get_db_connection()
@@ -820,6 +894,7 @@ def profile_page():
     return render_template('profile.html', user=dict(user) if user else {})
 
 @app.route('/profile', methods=['POST'])
+@csrf_protect
 def profile_update():
     from werkzeug.security import check_password_hash, generate_password_hash
     if not session.get('logged_in'):
@@ -873,6 +948,7 @@ def notifications_page():
     return render_template('notifications.html', items=[dict(r) for r in rows])
 
 @app.route('/notifications/read', methods=['POST'])
+@csrf_protect
 def notifications_read():
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -918,6 +994,7 @@ def api_notifications():
     return jsonify({"unread": unread, "items": [dict(r) for r in rows]})
 
 @app.route('/api/notifications/read', methods=['POST'])
+@csrf_protect
 def api_notifications_read():
     if not session.get('logged_in'):
         return jsonify({"error": "unauthorized"}), 401
@@ -944,6 +1021,7 @@ def users_page():
     return render_template('users.html', users=[dict(r) for r in rows])
 
 @app.route('/users', methods=['POST'])
+@csrf_protect
 def users_create():
     from werkzeug.security import generate_password_hash
     if not session.get('logged_in') or not _admin():
@@ -965,7 +1043,8 @@ def users_create():
     conn.close()
     return redirect(url_for('users_page'))
 
-@app.route('/users/<int:id>/delete')
+@app.route('/users/<int:id>/delete', methods=['POST'])
+@csrf_protect
 def users_delete(id):
     if not session.get('logged_in') or not _admin():
         return redirect(url_for('dashboard'))
@@ -999,6 +1078,7 @@ def users_edit(id):
     return render_template('user_edit.html', u=dict(u), me=(id == session.get('user_id')))
 
 @app.route('/users/<int:id>', methods=['POST'])
+@csrf_protect
 def users_update(id):
     from werkzeug.security import generate_password_hash
     if not session.get('logged_in') or not _admin():
@@ -1079,6 +1159,7 @@ def settings_page():
                            is_admin=_admin())
 
 @app.route('/settings/brokers', methods=['POST'])
+@csrf_protect
 def settings_broker_add():
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -1112,7 +1193,7 @@ def settings_broker_add():
         (_uid(), name, host, port, 9001,
          1 if request.form.get('use_tls') else 0,
          (request.form.get('username') or '').strip(),
-         request.form.get('password') or '', shared))
+         dbmod.enc_pw(request.form.get('password') or ''), shared))
     conn.commit()
     row = conn.execute(
         'SELECT * FROM broker_connections WHERE user_id=? AND host=? ORDER BY id DESC LIMIT 1',
@@ -1136,7 +1217,8 @@ def spawn_bridge(row):
         print(f"[smarthl] bridge gagal start: {e}", flush=True)
         return False
 
-@app.route('/settings/brokers/<int:id>/toggle')
+@app.route('/settings/brokers/<int:id>/toggle', methods=['POST'])
+@csrf_protect
 def settings_broker_toggle(id):
     """Enable/disable koneksi (termasuk bawaan id=1 — khusus admin)."""
     if not session.get('logged_in'):
@@ -1229,11 +1311,10 @@ LANGS = {
         'Akun dinonaktifkan, hubungi admin': 'Account deactivated, contact an admin',
         'Magic Packet dikirim ke {name} via {interface}!': 'Magic packet sent to {name} via {interface}!',
         'Gagal mengirim WoL: {e}': 'WoL send failed: {e}',
-        'Koneksi broker': 'Broker connections',
-        'mati': 'off',
-        'tidak': 'no',
-        'ya': 'yes',
-        '(bawaan)': '(built-in)',
+        'tidak': 'no', 'ya': 'yes', '(bawaan)': '(built-in)',
+        'Terlalu banyak percobaan. Tunggu 5 menit.': 'Too many attempts. Wait 5 minutes.',
+        'MQTT ID hanya huruf kecil/angka/_/- (3-24 karakter)': 'MQTT ID: lowercase letters/numbers/_/- only (3-24 chars)',
+        'Aksi ditolak (CSRF). Muat ulang halaman.': 'Action rejected (CSRF). Reload the page.',
         # Dashboard & perangkat
         'Monitoring sistem SmartHome anda.': 'Monitor and control all your devices.',
         'Tambah Perangkat': 'Add Device', 'Tambah Device Baru': 'New Device',
@@ -1248,10 +1329,8 @@ LANGS = {
         'Belum ada kontrol. Buka halaman device → tambah fungsi kind toggle/button/slider.': 'No controls yet. Open a device page and add a toggle/button/slider function.',
         # Settings
         'Pilih broker mana yang dipakai. Default: broker bawaan yang ikut paket compose.': 'Choose which broker to use. Default: the bundled broker.',
-        'Koneksi broker': 'Broker connections',
-        'mati': 'off', 'Tambah koneksi broker': 'Add broker connection',
+        'Tambah koneksi broker': 'Add broker connection',
         # Notifikasi & pengguna
-        'Semua notifikasi ditandai dibaca': 'All notifications marked as read',
         'Tandai semua dibaca': 'Mark all as read',
         # Konfirmasi
         'Hapus device ini?': 'Delete this device?',
@@ -1278,9 +1357,10 @@ def _inject_t():
     table = LANGS.get(_lang(), {})
     def t(s):
         return table.get(s, s)
-    return {"t": t}
+    return {"t": t, "csrf_token": csrf_token}
 
 @app.route('/settings/lang', methods=['POST'])
+@csrf_protect
 def settings_lang():
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -1298,6 +1378,7 @@ def settings_lang():
     return redirect(url_for('settings_page'))
 
 @app.route('/settings/brokers/<int:id>/edit', methods=['POST'])
+@csrf_protect
 def settings_broker_edit(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -1329,13 +1410,14 @@ def settings_broker_edit(id):
         + (', password=?' if pw else '') + ', is_shared=? WHERE id=?',
         (name, host, port, 1 if request.form.get('use_tls') else 0,
          (request.form.get('username') or '').strip()) +
-        ((pw,) if pw else ()) + ((1 if (_admin() and request.form.get('is_shared')) else 0), id))
+        ((dbmod.enc_pw(pw),) if pw else ()) + ((1 if (_admin() and request.form.get('is_shared')) else 0), id))
     conn.commit()
     conn.close()
     flash(L('Koneksi {name} disimpan. Berlaku penuh setelah restart app.', name=name), 'success')
     return redirect(url_for('settings_page'))
 
-@app.route('/settings/brokers/<int:id>/delete')
+@app.route('/settings/brokers/<int:id>/delete', methods=['POST'])
+@csrf_protect
 def settings_broker_delete(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
@@ -1376,6 +1458,38 @@ def settings_broker_test(id):
         flash(L('{name}: gagal ({e})', name=b['name'], e=e), 'error')
     return redirect(url_for('settings_page'))
 
+def prune_old_telemetry(days=None):
+    """Hapus telemetri lebih tua dari N hari (default env TELEMETRY_RETENTION_DAYS=90)."""
+    try:
+        days = int(days if days is not None else os.environ.get("TELEMETRY_RETENTION_DAYS", "90"))
+    except ValueError:
+        days = 90
+    if days <= 0:
+        return 0
+    conn = get_db_connection()
+    try:
+        if dbmod.DIALECT == "mariadb":
+            cur = conn.execute("DELETE FROM telemetry WHERE ts < DATE_SUB(NOW(), INTERVAL %s DAY)" % days)
+        else:
+            cur = conn.execute("DELETE FROM telemetry WHERE ts < datetime('now', ?)",
+                               (f"-{days} days",))
+        conn.commit()
+        n = cur.rowcount if hasattr(cur, "rowcount") else -1
+    except Exception as e:
+        print(f"[smarthl] prune gagal: {e}", flush=True)
+        n = -1
+    conn.close()
+    return n
+
+
+def _prune_loop():
+    import time as _t
+    while True:
+        _t.sleep(86400)
+        n = prune_old_telemetry()
+        print(f"[smarthl] prune telemetri: {n} baris", flush=True)
+
+
 def _start_bridge_thread():
     try:
         from mqtt_bridge import main as bridge_main
@@ -1385,13 +1499,23 @@ def _start_bridge_thread():
     except Exception as e:
         print(f"[smarthl] bridge gagal start: {e}", flush=True)
 
+def _start_helpers():
+    _start_bridge_thread()
+    try:
+        n = prune_old_telemetry()
+        print(f"[smarthl] prune awal: {n} baris lama", flush=True)
+    except Exception as e:
+        print(f"[smarthl] prune awal gagal: {e}", flush=True)
+    t = threading.Thread(target=_prune_loop, daemon=True, name="prune")
+    t.start()
+
 if __name__ == '__main__':
     init_db()
-    _start_bridge_thread()
+    _start_helpers()
     app.run(debug=True, host='0.0.0.0', port=5000)
 
 # Dipakai saat dijalankan via WSGI prod (gunicorn di container):
 # gunicorn tidak mengeksekusi blok __main__, jadi bridge+skema di-trigger env.
 if os.environ.get("RUN_BRIDGE") == "1" and not os.environ.get("WERKZEUG_RUN_MAIN"):
     init_db()
-    _start_bridge_thread()
+    _start_helpers()

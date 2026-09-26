@@ -43,8 +43,8 @@
                             data-edit="{{ b.id }}" data-name="{{ b.name }}" data-host="{{ b.host }}" data-port="{{ b.port }}"
                             data-username="{{ b.username }}" data-tls="{{ 1 if b.use_tls else 0 }}" data-shared="{{ 1 if b.is_shared else 0 }}"
                             onclick="openBrokerModal(this)"><i class="fas fa-cog"></i></button>{% endif %}
-                        {% if b.user_id == session.get('user_id') or is_admin %}<a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_toggle', id=b.id) }}" title="{{ 'Matikan' if b.enabled else 'Nyalakan' }}"><i class="fas fa-power-off"></i></a>{% endif %}
-                        {% if b.id != 1 and (b.user_id == session.get('user_id') or is_admin) %}<a class="btn danger" href="{{ url_for('settings_broker_delete', id=b.id) }}" onclick="return confirm('Hapus koneksi {{ b.name }}?')"><i class="fas fa-trash"></i></a>{% endif %}
+                        {% if b.user_id == session.get('user_id') or is_admin %}<form action="{{ url_for('settings_broker_toggle', id=b.id) }}" method="POST" style="display:inline;"><button class="btn" style="padding:6px 12px; font-size:.8rem;" type="submit" title="{{ 'Matikan' if b.enabled else 'Nyalakan' }}"><i class="fas fa-power-off"></i></button></form>{% endif %}
+                        {% if b.id != 1 and (b.user_id == session.get('user_id') or is_admin) %}<form action="{{ url_for('settings_broker_delete', id=b.id) }}" method="POST" style="display:inline;" onsubmit="return confirm(&quot;Hapus koneksi {{ b.name }}?&quot;)"><button type="submit" class="btn danger"><i class="fas fa-trash"></i></button></form>{% endif %}
                     </td>
                 </tr>
                 {% endfor %}

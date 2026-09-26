@@ -19,9 +19,11 @@
     <div class="card dev-card" style="margin-bottom:0; animation-delay:{{ loop.index0 * 90 }}ms;">
         <div class="card-header">
             <i class="fas {% if device.type == 'PC' %}fa-desktop{% elif device.type == 'Lampu' %}fa-lightbulb{% elif device.type == 'Sensor' or device.type == 'Controller' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
-            <a href="{{ url_for('delete_device', id=device.id) }}" style="color: rgba(255,255,255,0.3);" onclick="return confirm('{{ t('Hapus device ini?') }}')">
-                <i class="fas fa-trash-alt"></i>
-            </a>
+            <form action="{{ url_for('delete_device', id=device.id) }}" method="POST" style="display:inline;" onsubmit="return confirm(&quot;{{ t('Hapus device ini?') }}&quot;)">
+                <button type="submit" style="background:none; border:none; color: rgba(255,255,255,0.3); cursor:pointer; font-size:1.5rem;" title="{{ t('Hapus') }}">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </form>
         </div>
         <div class="card-value"><a href="{{ url_for('device_detail', id=device.id) }}" style="text-decoration:none;">{{ device.name }}</a></div>
 
@@ -93,9 +95,11 @@
 
         {% if device.type == 'PC' %}
         <div style="margin-top: 15px;">
-            <a href="{{ url_for('wake_device', id=device.id) }}" class="btn-add" style="background: rgba(118, 75, 162, 0.4); font-size: 0.8rem; justify-content: center; padding: 10px; width:100%;">
-                <i class="fas fa-power-off"></i> Wake On LAN
-            </a>
+            <form action="{{ url_for('wake_device', id=device.id) }}" method="POST">
+                <button type="submit" class="btn-add" style="background: rgba(118, 75, 162, 0.4); font-size: 0.8rem; justify-content: center; padding: 10px; width:100%;">
+                    <i class="fas fa-power-off"></i> Wake On LAN
+                </button>
+            </form>
         </div>
         {% elif device.type != 'Sensor' and not device.mqtt_id %}
         <div style="margin-top: 15px;">
@@ -167,7 +171,7 @@
                     el.classList.toggle('on', on);
                     el.classList.toggle('off', !on);
                 });
-                fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}})
+                fetch(f.action, {method: 'POST', body: fd, headers: Object.assign({'X-Requested-With': 'fetch'}, csrfHeaders())})
                     .then(function(r) { return r.json(); })
                     .then(function(j) { window.showToast(j.ok ? ('Terkirim: ' + j.key + '=' + j.value) : ('Gagal: ' + (j.error || '?')), !!j.ok); })
                     .catch(function() { window.showToast('Gagal kirim perintah', false); });
@@ -175,7 +179,7 @@
         });
         async function poll() {
             try {
-                var r = await fetch('/kontrol/data', {headers: {'X-Requested-With': 'fetch'}});
+                var r = await fetch('/kontrol/data', {headers: Object.assign({'X-Requested-With': 'fetch'}, csrfHeaders())});
                 if (!r.ok) return;
                 var j = await r.json();
                 (j.groups || []).forEach(function(g) {

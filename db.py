@@ -45,6 +45,33 @@ def auto_pk():
     return "INTEGER PRIMARY KEY AUTOINCREMENT"
 
 
+def _fernet():
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+    secret = os.environ.get("SECRET_KEY", "smarthl_secret_key").encode()
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(secret).digest()))
+
+
+def enc_pw(p):
+    """Enkripsi password broker eksternal. Ganti SECRET_KEY = data tak terbaca."""
+    if not p:
+        return ""
+    return "enc:" + _fernet().encrypt(p.encode()).decode()
+
+
+def dec_pw(s):
+    """Dekripsi; fallback plaintext untuk data lama (di-enkripsi ulang saat disimpan)."""
+    if not s:
+        return ""
+    if s.startswith("enc:"):
+        try:
+            return _fernet().decrypt(s[4:].encode()).decode()
+        except Exception:
+            return ""
+    return s
+
+
 class Conn:
     """Wrapper tipis: execute() otomatis translate placeholder."""
 

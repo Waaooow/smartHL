@@ -5,3 +5,4 @@ database.db
 .env
 mosquitto/data/
 mosquitto/auth/
+backups/

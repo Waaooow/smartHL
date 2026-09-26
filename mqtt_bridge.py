@@ -282,7 +282,7 @@ def run_broker(b):
             cid = f"smarthl-bridge-{bid}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
             client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
             user = b.get("username") or (BROKER_USER if bid == 1 else "")
-            pw = b.get("password") or (BROKER_PASS if bid == 1 else "")
+            pw = dbmod.dec_pw(b.get("password")) or (BROKER_PASS if bid == 1 else "")
             if user:
                 client.username_pw_set(user, pw)
             on_connect, on_message = make_callbacks(bid)
