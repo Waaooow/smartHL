@@ -36,7 +36,7 @@ services:
     image: cedalo/management-center:2
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${MQTT_MGMT_PORT:-8088}:8088"
+      - "${MQTT_MGMT_PORT:-8088}:8088"
     depends_on:
       - mosquitto
 
@@ -45,7 +45,8 @@ services:
     restart: unless-stopped
     ports:
       # Prod: reverse-proxy + TLS di depan, cth https://iot.alfins.my.id -> :5000
-      - "127.0.0.1:${APP_PORT:-5000}:5000"
+      # Bind 0.0.0.0 agar bisa diakses dari LAN (kunci via firewall/Cloudflare).
+      - "${APP_PORT:-5000}:5000"
     environment:
       DB_TYPE: mariadb
       DB_HOST: mariadb
