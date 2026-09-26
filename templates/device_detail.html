@@ -78,7 +78,7 @@
     <form action="{{ url_for('add_function', id=device.id) }}" method="POST" style="display:flex; gap:10px; flex-wrap:wrap;">
         <input name="key" placeholder="key, cth: relay1" required style="flex:1; min-width:120px;">
         <input name="label" placeholder="Label, cth: Relay Pompa" style="flex:1; min-width:140px;">
-        <select name="kind">
+        <select name="kind" class="dd">
             <option value="sensor">sensor (tampil)</option>
             <option value="toggle">toggle (on/off)</option>
             <option value="button">button (tekan)</option>
@@ -129,7 +129,7 @@
 <div class="card">
     <h3 style="margin-bottom:12px;"><i class="fas fa-history"></i> Riwayat</h3>
     <form method="GET" action="{{ url_for('device_detail', id=device.id) }}" style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
-        <select name="hist_key" onchange="this.form.submit();">
+        <select name="hist_key" class="dd" data-submit>
             {% for v in variables %}
             <option value="{{ v.key }}" {% if v.key == hist_key %}selected{% endif %}>{{ v.key }}</option>
             {% endfor %}

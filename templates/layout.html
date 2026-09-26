@@ -84,6 +84,21 @@
         table.data th, table.data td { text-align:left; padding:10px; border-bottom:1px solid rgba(255,255,255,.15); vertical-align:top; }
         table.data th { opacity:.75; font-size:.8rem; }
 
+        /* --- Dropdown custom (pengganti select native di HP) --- */
+        .cdd { position:relative; }
+        .cdd-btn { width:100%; padding:12px; border-radius:10px; border:none; background:rgba(255,255,255,.2);
+            color:white; outline:none; display:flex; justify-content:space-between; align-items:center;
+            gap:10px; cursor:pointer; font-size:.95rem; }
+        .cdd-btn i { opacity:.7; font-size:.8rem; transition:transform .2s; }
+        .cdd.open .cdd-btn i { transform:rotate(180deg); }
+        .cdd-list { display:none; position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:500;
+            background:rgba(90,82,165,.98); border:1px solid rgba(255,255,255,.25); border-radius:12px;
+            overflow:hidden; max-height:220px; overflow-y:auto; box-shadow:0 16px 40px rgba(0,0,0,.4); }
+        .cdd.open .cdd-list { display:block; }
+        .cdd-opt { padding:12px 14px; cursor:pointer; font-size:.9rem; }
+        .cdd-opt:hover { background:rgba(255,255,255,.15); }
+        .cdd-opt.sel { background:rgba(255,255,255,.22); font-weight:bold; }
+
         /* --- Modal --- */
         #addModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.6); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:20px; }
         .modal-content { background:rgba(120,110,180,.95); border:1px solid rgba(255,255,255,.2); padding:30px; border-radius:25px; width:100%; max-width:400px; box-shadow:0 25px 50px rgba(0,0,0,.3); text-align:center; max-height:90vh; overflow-y:auto; }
@@ -286,6 +301,65 @@
   }
   setInterval(refreshBadge, 15000);
   refreshBadge();
+
+  // Dropdown custom: ubah select.dd jadi tombol+list bertema (tanpa popup OS)
+  document.querySelectorAll('select.dd').forEach(function(sel) {
+    var name = sel.getAttribute('name');
+    var wrap = document.createElement('div');
+    wrap.className = 'cdd';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cdd-btn';
+    var hid = document.createElement('input');
+    hid.type = 'hidden';
+    hid.name = name || '';
+    function labelOf(opt) { return opt.textContent; }
+    function syncFromSelect() {
+      var opt = sel.options[sel.selectedIndex];
+      btn.innerHTML = '';
+      btn.appendChild(document.createTextNode(labelOf(opt) + ' '));
+      var ic = document.createElement('i');
+      ic.className = 'fas fa-chevron-down';
+      btn.appendChild(ic);
+      hid.value = opt.value;
+      list.querySelectorAll('.cdd-opt').forEach(function(o) {
+        o.classList.toggle('sel', o.getAttribute('data-value') === opt.value);
+      });
+    }
+    var list = document.createElement('div');
+    list.className = 'cdd-list';
+    Array.from(sel.options).forEach(function(opt) {
+      var o = document.createElement('div');
+      o.className = 'cdd-opt';
+      o.setAttribute('data-value', opt.value);
+      o.textContent = labelOf(opt);
+      o.addEventListener('click', function(e) {
+        e.stopPropagation();
+        sel.value = opt.value;
+        syncFromSelect();
+        wrap.classList.remove('open');
+        if (sel.hasAttribute('data-submit')) {
+          var f = sel.closest('form');
+          if (f) f.submit();
+        }
+      });
+      list.appendChild(o);
+    });
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.querySelectorAll('.cdd.open').forEach(function(o) { if (o !== wrap) o.classList.remove('open'); });
+      wrap.classList.toggle('open');
+    });
+    document.addEventListener('click', function() { wrap.classList.remove('open'); });
+    sel.removeAttribute('name');
+    sel.style.display = 'none';
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(btn);
+    wrap.appendChild(list);
+    wrap.appendChild(hid);
+    wrap.appendChild(sel);
+    syncFromSelect();
+  });
 })();
 </script>
 {% block scripts %}{% endblock %}

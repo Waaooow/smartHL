@@ -371,7 +371,7 @@ def dashboard():
 @app.route('/add_device', methods=['POST'])
 def add_device():
     name = request.form['name']
-    dev_type = request.form['type']
+    dev_type = request.form.get('type') or 'Controller'
     ip = request.form.get('ip_address')
     mac = request.form.get('mac_address')
     interface = request.form.get('interface', 'eth0') # Ambil input interface

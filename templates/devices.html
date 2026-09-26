@@ -10,7 +10,7 @@
     {% for d in devices %}
     <div class="card" style="margin-bottom:0; cursor:pointer;" onclick="location.href='{{ url_for('device_detail', id=d.id) }}'">
         <div class="card-header">
-            <i class="fas {% if d.type == 'PC' %}fa-desktop{% elif d.type == 'Lampu' %}fa-lightbulb{% elif d.type == 'Sensor' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
+            <i class="fas {% if d.type == 'PC' %}fa-desktop{% elif d.type == 'Lampu' %}fa-lightbulb{% elif d.type == 'Sensor' or d.type == 'Controller' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
             <span style="font-size:.75rem; opacity:.7;">{{ d.type }}</span>
         </div>
         <div class="card-value" style="font-size:1.2rem;">{{ d.name }}</div>

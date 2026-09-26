@@ -18,7 +18,7 @@
     {% for device in devices %}
     <div class="card" style="margin-bottom:0;">
         <div class="card-header">
-            <i class="fas {% if device.type == 'PC' %}fa-desktop{% elif device.type == 'Lampu' %}fa-lightbulb{% elif device.type == 'Sensor' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
+            <i class="fas {% if device.type == 'PC' %}fa-desktop{% elif device.type == 'Lampu' %}fa-lightbulb{% elif device.type == 'Sensor' or device.type == 'Controller' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
             <a href="{{ url_for('delete_device', id=device.id) }}" style="color: rgba(255,255,255,0.3);" onclick="return confirm('Hapus device ini?')">
                 <i class="fas fa-trash-alt"></i>
             </a>
@@ -107,11 +107,8 @@
             </div>
             <div class="input-group">
                 <label>Tipe Perangkat</label>
-                <select name="type" id="typeSelect" onchange="togglePCFields()">
-                    <option value="Lampu">Lampu / Smart Plug (MQTT)</option>
-                    <option value="PC">Komputer (WoL & Ping)</option>
-                    <option value="Sensor">Sensor (MQTT)</option>
-                </select>
+                <input type="text" value="Controller (ESP / IoT)" disabled>
+                <input type="hidden" name="type" value="Controller">
             </div>
             <div class="input-group">
                 <label>MQTT ID (kosongkan = auto, cth: shl-demo01)</label>
@@ -120,28 +117,13 @@
             {% if brokers|length > 1 %}
             <div class="input-group">
                 <label>Broker</label>
-                <select name="broker_id">
+                <select name="broker_id" class="dd">
                     {% for b in brokers %}
                     <option value="{{ b.id }}" {% if b.id == 1 %}selected{% endif %}>{{ b.name }} ({{ b.host }}:{{ b.port }})</option>
                     {% endfor %}
                 </select>
             </div>
             {% endif %}
-
-            <div id="pcFields" style="display: none;">
-                <div class="input-group">
-                    <label>IP Address</label>
-                    <input type="text" name="ip_address" placeholder="192.168.1.10">
-                </div>
-                <div class="input-group">
-                    <label>MAC Address</label>
-                    <input type="text" name="mac_address" placeholder="AA:BB:CC:DD:EE:FF">
-                </div>
-                <div class="input-group">
-                    <label>Interface (Debian)</label>
-                    <input type="text" name="interface" placeholder="eth0 atau enp3s0" value="eth0">
-                </div>
-            </div>
 
             <button type="submit" class="btn-submit">SIMPAN</button>
             <button type="button" onclick="document.getElementById('addModal').style.display='none'"
@@ -154,11 +136,6 @@
 {% endblock %}
 {% block scripts %}
 <script>
-    function togglePCFields() {
-        const select = document.getElementById('typeSelect');
-        const pcFields = document.getElementById('pcFields');
-        pcFields.style.display = (select.value === 'PC') ? 'block' : 'none';
-    }
     // Aksi kartu tanpa reload + polling chip/toggle tiap 5 dtk
     (function() {
         var locks = {};

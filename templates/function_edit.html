@@ -14,7 +14,7 @@
         </div>
         <div class="input-group">
             <label>Kind</label>
-            <select name="kind">
+            <select name="kind" class="dd">
                 <option value="sensor" {% if f.kind=='sensor' %}selected{% endif %}>sensor (tampil)</option>
                 <option value="toggle" {% if f.kind=='toggle' %}selected{% endif %}>toggle (on/off)</option>
                 <option value="button" {% if f.kind=='button' %}selected{% endif %}>button (tekan)</option>
