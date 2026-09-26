@@ -16,7 +16,7 @@
 
 <div class="grid">
     {% for device in devices %}
-    <div class="card" style="margin-bottom:0;">
+    <div class="card dev-card" style="margin-bottom:0; animation-delay:{{ loop.index0 * 90 }}ms;">
         <div class="card-header">
             <i class="fas {% if device.type == 'PC' %}fa-desktop{% elif device.type == 'Lampu' %}fa-lightbulb{% elif device.type == 'Sensor' or device.type == 'Controller' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
             <a href="{{ url_for('delete_device', id=device.id) }}" style="color: rgba(255,255,255,0.3);" onclick="return confirm('Hapus device ini?')">
@@ -26,52 +26,64 @@
         <div class="card-value"><a href="{{ url_for('device_detail', id=device.id) }}" style="text-decoration:none;">{{ device.name }}</a></div>
 
         <div class="card-label">
-            Status: <span style="color: {% if device.status == 'Online' %}#4cd137{% else %}#ff4757{% endif %}; font-weight: bold;">{{ device.status }}</span>
+            <span class="dot {% if device.status == 'Online' %}on{% else %}off{% endif %}"></span><b>{{ device.status }}</b>
+            <span style="opacity:.6;"> · <code>smarthl/{{ device.mqtt_id }}/#</code>{% if is_admin %} · {{ device.owner_name }}{% endif %}</span>
         </div>
 
         {% if device.ip_address %}
         <div class="card-label">IP: {{ device.ip_address }}</div>
         {% endif %}
         {% if device.mqtt_id %}
-        <div class="card-label">MQTT: <code>smarthl/{{ device.mqtt_id }}/#</code></div>
-        {% if is_admin %}
-        <div class="card-label">Pemilik: <b>{{ device.owner_name }}</b></div>
-        {% endif %}
         {% set sensors = device.funcs | selectattr('kind','equalto','sensor') | list %}
         {% set ctrls = device.funcs | rejectattr('kind','equalto','sensor') | list %}
         {% if sensors %}
-        <div class="card-label" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
-            {% for f in sensors %}
-            <span data-dchip data-dev="{{ device.id }}" data-key="{{ f.key }}" data-unit="{{ f.unit }}" data-label="{{ f.label }}" style="background:rgba(255,255,255,.15); border-radius:8px; padding:4px 10px;">{{ f.label }}: <b>{% if f.key in device.vals %}{{ device.vals[f.key].value }}{% else %}—{% endif %}{{ f.unit }}</b></span>
-            {% endfor %}
+        <div class="subdiv">
+            <div class="sub-title"><i class="fas fa-thermometer-half"></i> Sensor</div>
+            <div class="sensor-grid">
+                {% for f in sensors %}
+                <div class="sensor-tile" data-dtile data-dev="{{ device.id }}" data-key="{{ f.key }}">
+                    <i class="fas {% if 'temp' in f.key %}fa-thermometer-half{% elif 'hum' in f.key %}fa-tint{% elif 'rssi' in f.key or 'wifi' in f.key or 'sinyal' in f.label.lower() %}fa-wifi{% elif 'light' in f.key or 'cahaya' in f.label.lower() %}fa-sun{% elif 'smoke' in f.key or 'asap' in f.label.lower() %}fa-smog{% else %}fa-gauge-high{% endif %}"></i>
+                    <b data-dchip data-dev="{{ device.id }}" data-key="{{ f.key }}" data-unit="{{ f.unit }}" data-label="{{ f.label }}">{% if f.key in device.vals %}{{ device.vals[f.key].value }}{% else %}—{% endif %}{{ f.unit }}</b>
+                    <small>{{ f.label }}</small>
+                </div>
+                {% endfor %}
+            </div>
         </div>
         {% elif device.funcs %}
         <div class="card-label" style="opacity:.7">Belum ada telemetri</div>
         {% endif %}
         {% if ctrls %}
-        <div class="btn-row">
+        <div class="subdiv">
+            <div class="sub-title"><i class="fas fa-sliders-h"></i> Kontrol</div>
+            <div class="toggle-list">
             {% for f in ctrls %}
             {% set cur = device.vals[f.key].value if f.key in device.vals else 0 %}
             {% if f.kind == 'toggle' %}
-            <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:inline-flex; align-items:center; gap:6px;">
-                <input type="hidden" name="key" value="{{ f.key }}">
-                <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
-                <label class="switch" style="width:44px; height:22px;">
-                    <input type="checkbox" data-dtoggle data-dev="{{ device.id }}" data-key="{{ f.key }}" {% if cur %}checked{% endif %} onchange="this.form.value.value=this.checked?1:0; this.form.requestSubmit();">
-                    <span class="slider"></span>
-                </label>
-                <input type="hidden" name="value" value="{{ 0 if cur else 1 }}">
-                <span style="font-size:.8rem;">{{ f.label }}</span>
+            <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST">
+                <div class="toggle-row">
+                    <input type="hidden" name="key" value="{{ f.key }}">
+                    <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
+                    <label class="switch" style="width:44px; height:22px;">
+                        <input type="checkbox" data-dtoggle data-dev="{{ device.id }}" data-key="{{ f.key }}" {% if cur %}checked{% endif %} onchange="this.form.value.value=this.checked?1:0; this.form.requestSubmit();">
+                        <span class="slider"></span>
+                    </label>
+                    <input type="hidden" name="value" value="{{ 0 if cur else 1 }}">
+                    <span class="lbl">{{ f.label }}</span>
+                    <span class="state-pill {% if cur %}on{% else %}off{% endif %}" data-dstate data-dev="{{ device.id }}" data-key="{{ f.key }}">{{ 'ON' if cur else 'OFF' }}</span>
+                </div>
             </form>
             {% elif f.kind == 'button' %}
-            <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST" style="display:inline;">
-                <input type="hidden" name="key" value="{{ f.key }}">
-                <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
-                <input type="hidden" name="value" value="1">
-                <button class="btn-add" style="padding:6px 12px; font-size:.75rem;" type="submit"><i class="fas fa-bolt"></i> {{ f.label }}</button>
+            <form class="ajax-action" action="{{ url_for('device_action', id=device.id) }}" method="POST">
+                <div class="toggle-row">
+                    <input type="hidden" name="key" value="{{ f.key }}">
+                    <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
+                    <input type="hidden" name="value" value="1">
+                    <button class="btn-add" style="padding:6px 12px; font-size:.75rem;" type="submit"><i class="fas fa-bolt"></i> {{ f.label }}</button>
+                </div>
             </form>
             {% endif %}
             {% endfor %}
+            </div>
         </div>
         {% endif %}
         <div class="btn-row">
@@ -148,6 +160,13 @@
                 var lk = (box ? box.getAttribute('data-dev') : '') + '|' + key;
                 locks[lk] = Date.now() + 8000;
                 if (box) box.checked = fd.get('value') != '0';
+                var on = fd.get('value') != '0';
+                var dev = box ? box.getAttribute('data-dev') : '';
+                document.querySelectorAll('[data-dstate][data-dev="' + dev + '"][data-key="' + key + '"]').forEach(function(el) {
+                    el.textContent = on ? 'ON' : 'OFF';
+                    el.classList.toggle('on', on);
+                    el.classList.toggle('off', !on);
+                });
                 fetch(f.action, {method: 'POST', body: fd, headers: {'X-Requested-With': 'fetch'}})
                     .then(function(r) { return r.json(); })
                     .then(function(j) { window.showToast(j.ok ? ('Terkirim: ' + j.key + '=' + j.value) : ('Gagal: ' + (j.error || '?')), !!j.ok); })
@@ -166,14 +185,25 @@
                         var v = g.vals[k].value;
                         document.querySelectorAll('[data-dchip][data-dev="' + g.device_id + '"][data-key="' + k + '"]').forEach(function(el) {
                             var num = parseFloat(v);
-                            el.innerHTML = '';
-                            el.appendChild(document.createTextNode(el.getAttribute('data-label') + ': '));
-                            var b = document.createElement('b');
-                            b.textContent = (isNaN(num) ? v : (Math.round(num * 10) / 10)) + (el.getAttribute('data-unit') || '');
-                            el.appendChild(b);
+                            var txt = (isNaN(num) ? v : (Math.round(num * 10) / 10)) + (el.getAttribute('data-unit') || '');
+                            if (el.textContent !== txt) {
+                                el.textContent = txt;
+                                var tile = el.closest('[data-dtile]');
+                                if (tile) {
+                                    tile.classList.remove('tick');
+                                    void tile.offsetWidth;
+                                    tile.classList.add('tick');
+                                }
+                            }
                         });
                         document.querySelectorAll('[data-dtoggle][data-dev="' + g.device_id + '"][data-key="' + k + '"]').forEach(function(el) {
                             el.checked = (parseFloat(v) !== 0);
+                        });
+                        document.querySelectorAll('[data-dstate][data-dev="' + g.device_id + '"][data-key="' + k + '"]').forEach(function(el) {
+                            var on = (parseFloat(v) !== 0);
+                            el.textContent = on ? 'ON' : 'OFF';
+                            el.classList.toggle('on', on);
+                            el.classList.toggle('off', !on);
                         });
                     });
                 });

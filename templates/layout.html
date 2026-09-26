@@ -99,6 +99,36 @@
         .cdd-opt:hover { background:rgba(255,255,255,.15); }
         .cdd-opt.sel { background:rgba(255,255,255,.22); font-weight:bold; }
 
+        /* --- Kartu device: sub-div + animasi --- */
+        @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+        @keyframes pulseDot { 0%,100% { box-shadow:0 0 0 0 rgba(76,209,55,.55); } 50% { box-shadow:0 0 0 7px rgba(76,209,55,0); } }
+        @keyframes tickFlash { 0% { background:rgba(76,209,55,.45); } 100% { background:rgba(255,255,255,.15); } }
+        .dev-card { animation:fadeUp .45s ease both; }
+        .dev-card:hover { transform:translateY(-5px); background:rgba(255,255,255,.15); }
+        .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:baseline; }
+        .dot.on { background:#4cd137; animation:pulseDot 2s infinite; }
+        .dot.off { background:#ff4757; }
+        .subdiv { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.1);
+            border-radius:14px; padding:12px 14px; margin-top:10px; }
+        .sub-title { font-size:.75rem; letter-spacing:1px; opacity:.65; margin-bottom:10px; text-transform:uppercase; }
+        .sensor-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:8px; }
+        .sensor-tile { background:rgba(255,255,255,.12); border-radius:10px; padding:8px 6px; text-align:center;
+            transition:transform .2s; }
+        .sensor-tile:hover { transform:scale(1.05); }
+        .sensor-tile i { font-size:1.1rem; color:#ffd700; display:block; margin-bottom:4px; }
+        .sensor-tile b { font-size:1.05rem; }
+        .sensor-tile small { display:block; opacity:.65; font-size:.7rem; margin-top:2px; }
+        .sensor-tile.tick { animation:tickFlash .7s ease; }
+        .toggle-list { display:flex; flex-direction:column; gap:10px; }
+        .toggle-row { display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.08);
+            border-radius:10px; padding:8px 12px; transition:background .2s; }
+        .toggle-row:hover { background:rgba(255,255,255,.14); }
+        .toggle-row .lbl { flex:1; font-size:.9rem; }
+        .state-pill { font-size:.7rem; font-weight:bold; border-radius:8px; padding:3px 10px;
+            background:rgba(255,255,255,.15); transition:background .3s; }
+        .state-pill.on { background:rgba(76,209,55,.4); }
+        .state-pill.off { background:rgba(255,71,87,.35); }
+
         /* --- Modal --- */
         #addModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.6); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:20px; }
         .modal-content { background:rgba(120,110,180,.95); border:1px solid rgba(255,255,255,.2); padding:30px; border-radius:25px; width:100%; max-width:400px; box-shadow:0 25px 50px rgba(0,0,0,.3); text-align:center; max-height:90vh; overflow-y:auto; }
