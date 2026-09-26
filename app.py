@@ -451,7 +451,7 @@ def device_cmd(id):
 
 @app.route('/device/<int:id>')
 def device_detail(id):
-    """Halaman per-device: sensor + kontrol (render dari device_functions) + kelola fungsi."""
+    """Halaman per-device: sensor + kontrol + Variabel (gabungan fungsi & histori)."""
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     conn = get_db_connection()
@@ -460,12 +460,50 @@ def device_detail(id):
         conn.close()
         return redirect(url_for('dashboard'))
     funcs = [dict(r) for r in ensure_functions(conn, device)]
+    by_key = {f['key']: f for f in funcs}
+    # Satu baris per key yang pernah dikirim device (terbaru dulu per key)
+    seen = conn.execute(
+        "SELECT key, value, ts FROM telemetry WHERE device_id=? ORDER BY ts DESC LIMIT 200",
+        (id,)).fetchall()
+    variables = []
+    done = set()
+    for r in seen:
+        if r['key'] in done:
+            continue
+        done.add(r['key'])
+        variables.append({"key": r['key'], "value": r['value'], "ts": r['ts'],
+                          "func": by_key.get(r['key'])})
+    # Fungsi terdaftar yang belum pernah kirim data tetap tampil (nilai —)
+    for f in funcs:
+        if f['key'] not in done:
+            variables.append({"key": f['key'], "value": None, "ts": '—', "func": f})
     vals = latest_values(conn, id, [f["key"] for f in funcs])
-    hist = [dict(r) for r in conn.execute(
-        "SELECT key, value, ts FROM telemetry WHERE device_id=? ORDER BY ts DESC LIMIT 60",
-        (id,)).fetchall()]
+    # Riwayat: 1 key dipilih (default sensor pertama / key pertama)
+    hist_key = (request.args.get('hist_key') or '').strip().lower()
+    avail = [v['key'] for v in variables] or [f['key'] for f in funcs]
+    if hist_key not in avail:
+        hist_key = avail[0] if avail else ''
+    hist = []
+    if hist_key:
+        hist = [dict(r) for r in conn.execute(
+            "SELECT value, ts FROM telemetry WHERE device_id=? AND key=? ORDER BY ts DESC LIMIT 30",
+            (id, hist_key)).fetchall()][::-1]
     conn.close()
-    return render_template('device_detail.html', device=device, funcs=funcs, vals=vals, hist=hist)
+    # Sparkline SVG: normalisasi 0..100 (x = index, y terbalik)
+    spark = ''
+    if hist:
+        vs = [h['value'] for h in hist]
+        lo, hi = min(vs), max(vs)
+        span = (hi - lo) or 1
+        n = len(hist)
+        coords = []
+        for i, h in enumerate(hist):
+            x = (i / (n - 1) * 100) if n > 1 else 0
+            y = 100 - (h['value'] - lo) / span * 100
+            coords.append(f"{x:.1f},{y:.1f}")
+        spark = ' '.join(coords)
+    return render_template('device_detail.html', device=device, funcs=funcs, vals=vals,
+                           variables=variables, hist_key=hist_key, hist=hist, spark=spark)
 
 @app.route('/device/<int:id>/data')
 def device_data(id):
@@ -602,6 +640,32 @@ def update_function(fid):
     conn.close()
     flash(f"Fungsi {f['key']} disimpan", 'success')
     return redirect(url_for('device_detail', id=f['device_id']))
+
+@app.route('/device/<int:id>/functions/quick', methods=['POST'])
+def quick_function(id):
+    """Jadikan key terdeteksi sebagai fungsi (kind sensor, label = key)."""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+    conn = get_db_connection()
+    if not owned_device(conn, id):
+        conn.close()
+        return redirect(url_for('dashboard'))
+    key = (request.form.get('key') or '').strip().lower()
+    if not key or not key.replace('_', '').isalnum() or len(key) > 24:
+        conn.close()
+        flash('Key tidak valid', 'error')
+        return redirect(url_for('device_detail', id=id))
+    try:
+        conn.execute(
+            "INSERT INTO device_functions (device_id, key, label, kind, sort)"
+            " VALUES (?,?,?,'sensor',COALESCE((SELECT MAX(sort)+1 FROM device_functions WHERE device_id=?),1))",
+            (id, key, key, id))
+        conn.commit()
+        flash(f"Key {key} dijadikan fungsi (sensor). Edit bila perlu.", 'success')
+    except Exception:
+        flash(f"Key '{key}' sudah terdaftar", 'error')
+    conn.close()
+    return redirect(url_for('device_detail', id=id))
 
 @app.route('/functions/<int:fid>/delete')
 def delete_function(fid):

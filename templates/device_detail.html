@@ -96,35 +96,57 @@
 </div>
 
 <div class="card">
-    <h3 style="margin-bottom:12px;"><i class="fas fa-list"></i> Semua fungsi ({{ funcs|length }})</h3>
+    <h3 style="margin-bottom:4px;"><i class="fas fa-list"></i> Variabel ({{ variables|length }})</h3>
+    <p style="font-size:.8rem; opacity:.65; margin-bottom:12px;">Satu baris per key yang dikirim device. Key baru bisa langsung dijadikan fungsi.</p>
     <div class="table-wrap">
         <table class="data stack">
-            <thead><tr><th>Key</th><th>Label</th><th>Kind</th><th>Unit/Pin</th><th>Alert</th><th>Nilai terakhir</th><th></th></tr></thead>
+            <thead><tr><th>Key</th><th>Nilai terakhir</th><th>Waktu</th><th>Status</th><th></th></tr></thead>
             <tbody>
-                {% for f in funcs %}
+                {% for v in variables %}
                 <tr>
-                    <td data-label="Key"><code>{{ f.key }}</code></td>
-                    <td data-label="Label">{{ f.label }}</td>
-                    <td data-label="Kind">{{ f.kind }}</td>
-                    <td data-label="Unit/Pin">{{ f.unit }} {{ f.pin }}</td>
-                    <td data-label="Alert">{% if f.alert_above is not none and f.alert_above != '' %}&gt;{{ f.alert_above }} {% endif %}{% if f.alert_below is not none and f.alert_below != '' %}&lt;{{ f.alert_below }}{% endif %}{% if (f.alert_above is none or f.alert_above == '') and (f.alert_below is none or f.alert_below == '') %}—{% endif %}</td>
-                    <td data-label="Terakhir">{% if f.key in vals %}{{ vals[f.key].value }} <span style="opacity:.6;">({{ vals[f.key].ts }})</span>{% else %}—{% endif %}</td>
-                    <td data-label="Aksi"><a class="btn danger" href="{{ url_for('edit_function', fid=f.id) }}"><i class="fas fa-pen"></i></a> <a class="btn danger" href="{{ url_for('delete_function', fid=f.id) }}" onclick="return confirm('Hapus fungsi {{ f.key }}?')"><i class="fas fa-trash"></i></a></td>
+                    <td data-label="Key"><code>{{ v.key }}</code></td>
+                    <td data-label="Nilai"><b>{{ v.value if v.value is not none else '—' }}</b></td>
+                    <td data-label="Waktu">{{ v.ts }}</td>
+                    <td data-label="Status">
+                        {% if v.func %}<span style="color:#4cd137;">terdaftar ({{ v.func.kind }})</span>
+                        {% else %}<span style="color:#ffd166;">baru terdeteksi</span>{% endif %}
+                    </td>
+                    <td data-label="Aksi">
+                        {% if v.func %}<a class="btn danger" href="{{ url_for('edit_function', fid=v.func.id) }}"><i class="fas fa-pen"></i></a> <a class="btn danger" href="{{ url_for('delete_function', fid=v.func.id) }}" onclick="return confirm('Hapus fungsi {{ v.key }}?')"><i class="fas fa-trash"></i></a>
+                        {% else %}<form action="{{ url_for('quick_function', id=device.id) }}" method="POST" style="display:inline;">
+                            <input type="hidden" name="key" value="{{ v.key }}">
+                            <button class="btn" style="padding:6px 12px; font-size:.8rem;" type="submit" title="Daftarkan sebagai fungsi sensor">+ Jadikan fungsi</button>
+                        </form>{% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+    {% if not variables %}<p style="opacity:.7;">Belum ada data dari device ini.</p>{% endif %}
 </div>
 
 <div class="card">
-    <h3 style="margin-bottom:12px;"><i class="fas fa-history"></i> Telemetri terakhir ({{ hist|length }})</h3>
+    <h3 style="margin-bottom:12px;"><i class="fas fa-history"></i> Riwayat</h3>
+    <form method="GET" action="{{ url_for('device_detail', id=device.id) }}" style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+        <select name="hist_key" onchange="this.form.submit();">
+            {% for v in variables %}
+            <option value="{{ v.key }}" {% if v.key == hist_key %}selected{% endif %}>{{ v.key }}</option>
+            {% endfor %}
+        </select>
+        <span style="font-size:.8rem; opacity:.65;">30 data terakhir{% if hist %} · {{ hist[0].ts }} → {{ hist[-1].ts }}{% endif %}</span>
+    </form>
+    {% if spark %}
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%; height:90px; background:rgba(255,255,255,.06); border-radius:10px; margin-bottom:12px;">
+        <polyline points="{{ spark }}" fill="none" stroke="#4cd137" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    </svg>
+    {% endif %}
     <div class="table-wrap">
         <table class="data stack">
-            <thead><tr><th>Key</th><th>Value</th><th>Waktu</th></tr></thead>
+            <thead><tr><th>Value</th><th>Waktu</th></tr></thead>
             <tbody>
-                {% for r in hist[:20] %}
-                <tr><td data-label="Key"><code>{{ r.key }}</code></td><td data-label="Value">{{ r.value }}</td><td data-label="Waktu">{{ r.ts }}</td></tr>
+                {% for r in hist|reverse %}
+                <tr><td data-label="Value">{{ r.value }}</td><td data-label="Waktu">{{ r.ts }}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
