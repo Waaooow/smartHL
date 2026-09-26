@@ -1167,11 +1167,44 @@ def settings_broker_toggle(id):
 
 LANGS = {
     'id': {},
-    'en': {'Dashboard': 'Dashboard', 'Perangkat': 'Devices', 'Kontrol': 'Control',
-           'Settings': 'Settings', 'Notifikasi': 'Notifications', 'Pengguna': 'Users',
-           'Profil': 'Profile', 'Keluar': 'Logout'},
+    'en': {
+        # Navigasi
+        'Dashboard': 'Dashboard', 'Perangkat': 'Devices', 'Kontrol': 'Control',
+        'Settings': 'Settings', 'Notifikasi': 'Notifications', 'Pengguna': 'Users',
+        'Profil': 'Profile', 'Keluar': 'Logout',
+        # Umum
+        'SIMPAN': 'SAVE', 'BATAL': 'CANCEL', 'BUKA': 'OPEN', 'Tambah': 'Add',
+        'Hapus': 'Delete', 'Edit': 'Edit', 'Tutup': 'Close', 'Buat': 'Create',
+        'Test': 'Test', 'Nama': 'Name', 'Waktu': 'Time', 'Judul': 'Title',
+        'Detail': 'Details', 'Password': 'Password', 'Port MQTT': 'MQTT port',
+        'Username (kosongkan bila anonymous)': 'Username (empty if anonymous)',
+        'Nama (cth: Broker kantor)': 'Name (e.g. Office broker)',
+        'cth: relay1': 'e.g. relay1', 'cth: Relay Pompa': 'e.g. Pump Relay',
+        'Tambah user': 'Add user', 'Tambah koneksi broker': 'Add broker connection',
+        'Setting koneksi broker': 'Edit broker connection',
+        # Dashboard & perangkat
+        'Monitoring sistem SmartHome anda.': 'Monitor and control all your devices.',
+        'Tambah Perangkat': 'Add Device', 'Tambah Device Baru': 'New Device',
+        'Nama Perangkat': 'Device name', 'MQTT ID (kosongkan = auto, cth: shl-demo01)': 'MQTT ID (empty = auto)',
+        'Broker': 'Broker', 'Belum ada telemetri': 'No telemetry yet',
+        'Klik kartu untuk buka halaman perangkat (atur fungsi & kontrol). Tambah baru lewat Dashboard.': 'Click a card to open the device page. Add new devices from the Dashboard.',
+        'Belum ada perangkat. Tambah lewat tombol di Dashboard.': 'No devices yet. Add one from the Dashboard.',
+        # Device detail
+        'Tambah fungsi': 'Add function', 'Variabel': 'Variables', 'Riwayat': 'History',
+        # Kontrol
+        'Semua kontrol (toggle / button / slider) dari semua perangkat dalam satu halaman.': 'All controls from every device on one page.',
+        'Belum ada kontrol. Buka halaman device → tambah fungsi kind toggle/button/slider.': 'No controls yet. Open a device page and add a toggle/button/slider function.',
+        # Settings
+        'Pilih broker mana yang dipakai. Default: broker bawaan yang ikut paket compose.': 'Choose which broker to use. Default: the bundled broker.',
+        'Koneksi broker': 'Broker connections', 'Tambah koneksi broker': 'Add broker connection',
+        # Notifikasi & pengguna
+        'Semua notifikasi ditandai dibaca': 'All notifications marked as read',
+        'Tandai semua dibaca': 'Mark all as read',
+        # Konfirmasi
+        'Hapus device ini?': 'Delete this device?',
+    },
 }
-# Kunci = label Indonesia; halaman selain navigasi masih Indonesia (bertahap).
+# Kunci = label Indonesia; pola t('...') dipakai di template.
 
 def _lang():
     l = session.get('lang', 'id')

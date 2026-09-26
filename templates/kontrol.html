@@ -4,10 +4,10 @@
 {% block content %}
 <div class="page-head">
     <h1>Kontrol</h1>
-    <p>Semua kontrol (toggle / button / slider) dari semua perangkat dalam satu halaman.</p>
+    <p>{{ t('Semua kontrol (toggle / button / slider) dari semua perangkat dalam satu halaman.') }}</p>
 </div>
 {% if not groups %}
-<div class="card">Belum ada kontrol. Buka halaman device → tambah fungsi kind toggle/button/slider.</div>
+<div class="card">{{ t('Belum ada kontrol. Buka halaman device → tambah fungsi kind toggle/button/slider.') }}</div>
 {% endif %}
 {% for g in groups %}
 <div class="card">

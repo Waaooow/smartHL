@@ -8,14 +8,14 @@
 </div>
 <div class="card">
     <form action="{{ url_for('notifications_read') }}" method="POST" style="margin-bottom:15px;">
-        <button class="btn" type="submit"><i class="fas fa-check-double"></i> Tandai semua dibaca</button>
+        <button class="btn" type="submit"><i class="fas fa-check-double"></i> {{ t('Tandai semua dibaca') }}</button>
     </form>
     {% if not items %}
     <p style="opacity:.7;">Belum ada notifikasi. Set ambang alert di halaman device (kolom “alert jika &gt;/&lt;”).</p>
     {% endif %}
     <div class="table-wrap">
         <table class="data stack">
-            <thead><tr><th>Waktu</th><th>Device</th><th>Judul</th><th>Detail</th><th>Status</th></tr></thead>
+            <thead><tr><th>{{ t('Waktu') }}</th><th>Device</th><th>{{ t('Judul') }}</th><th>{{ t('Detail') }}</th><th>Status</th></tr></thead>
             <tbody>
                 {% for n in items %}
                 <tr {% if not n.read %}style="background:rgba(255,255,255,.06);"{% endif %}>

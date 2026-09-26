@@ -70,14 +70,14 @@
 {% endif %}
 
 <div class="card">
-    <h3 style="margin-bottom:12px;"><i class="fas fa-plus-circle"></i> Tambah fungsi</h3>
+    <h3 style="margin-bottom:12px;"><i class="fas fa-plus-circle"></i> {{ t('Tambah fungsi') }}</h3>
     <p style="font-size:.8rem; color:rgba(255,255,255,.7); margin-bottom:12px;">
-        Daftarkan apa yang bisa dilakukan device ini. Contoh: tombol relay baru → key <code>relay1</code>, kind <code>toggle</code>, pin <code>GPIO5</code>.
-        Catatan: key baru harus didukung firmware.
+        Daftarkan kemampuan device (cth: key <code>relay1</code>, kind <code>toggle</code>).
+        Key harus didukung firmware — detail di dokumentasi.
     </p>
     <form action="{{ url_for('add_function', id=device.id) }}" method="POST" style="display:flex; gap:10px; flex-wrap:wrap;">
-        <input name="key" placeholder="key, cth: relay1" required style="flex:1; min-width:120px;">
-        <input name="label" placeholder="Label, cth: Relay Pompa" style="flex:1; min-width:140px;">
+        <input name="key" placeholder="{{ t('cth: relay1') }}" required style="flex:1; min-width:120px;">
+        <input name="label" placeholder="{{ t('cth: Relay Pompa') }}" style="flex:1; min-width:140px;">
         <select name="kind" class="dd">
             <option value="sensor">sensor (tampil)</option>
             <option value="toggle">toggle (on/off)</option>
@@ -88,15 +88,15 @@
         <input name="pin" placeholder="pin, cth: GPIO5" style="width:110px;">
         <input name="alert_above" placeholder="alert jika > (cth: 40)" style="width:140px;">
         <input name="alert_below" placeholder="alert jika < (cth: 10)" style="width:140px;">
-        <button class="btn" type="submit">Tambah</button>
+        <button class="btn" type="submit">{{ t('Tambah') }}</button>
     </form>
     <p style="font-size:.75rem; color:rgba(255,255,255,.6); margin-top:8px;">
-        Ambang alert untuk sensor (smoke, suhu, gerak). Melewati ambang → masuk Notifikasi (cooldown 15 mnt).
+        Ambang alert sensor (cth: smoke, suhu). Terlewati → Notifikasi (cooldown 15 mnt).
     </p>
 </div>
 
 <div class="card">
-    <h3 style="margin-bottom:4px;"><i class="fas fa-list"></i> Variabel ({{ variables|length }})</h3>
+    <h3 style="margin-bottom:4px;"><i class="fas fa-list"></i> {{ t('Variabel') }} ({{ variables|length }})</h3>
     <p style="font-size:.8rem; opacity:.65; margin-bottom:12px;">Satu baris per key yang dikirim device. Key baru bisa langsung dijadikan fungsi.</p>
     <div class="table-wrap">
         <table class="data stack">
@@ -127,7 +127,7 @@
 </div>
 
 <div class="card">
-    <h3 style="margin-bottom:12px;"><i class="fas fa-history"></i> Riwayat</h3>
+    <h3 style="margin-bottom:12px;"><i class="fas fa-history"></i> {{ t('Riwayat') }}</h3>
     <form method="GET" action="{{ url_for('device_detail', id=device.id) }}" style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
         <select name="hist_key" class="dd" data-submit>
             {% for v in variables %}

@@ -4,13 +4,13 @@
 {% block content %}
 <div class="page-head">
     <h1>Halo, {{ session.get('display_name', 'Admin') }}!</h1>
-    <p>Monitoring sistem SmartHome anda.</p>
+    <p>{{ t('Monitoring sistem SmartHome anda.') }}</p>
 </div>
 
 <div style="display:flex; justify-content:flex-end; margin-bottom:25px;">
     <button class="btn-add" onclick="document.getElementById('addModal').style.display='flex'">
         <i class="fas fa-plus-circle"></i>
-        <span>Tambah Perangkat</span>
+        <span>{{ t('Tambah Perangkat') }}</span>
     </button>
 </div>
 
@@ -19,7 +19,7 @@
     <div class="card dev-card" style="margin-bottom:0; animation-delay:{{ loop.index0 * 90 }}ms;">
         <div class="card-header">
             <i class="fas {% if device.type == 'PC' %}fa-desktop{% elif device.type == 'Lampu' %}fa-lightbulb{% elif device.type == 'Sensor' or device.type == 'Controller' %}fa-microchip{% else %}fa-plug{% endif %}"></i>
-            <a href="{{ url_for('delete_device', id=device.id) }}" style="color: rgba(255,255,255,0.3);" onclick="return confirm('Hapus device ini?')">
+            <a href="{{ url_for('delete_device', id=device.id) }}" style="color: rgba(255,255,255,0.3);" onclick="return confirm('{{ t('Hapus device ini?') }}')">
                 <i class="fas fa-trash-alt"></i>
             </a>
         </div>
@@ -50,7 +50,7 @@
             </div>
         </div>
         {% elif device.funcs %}
-        <div class="card-label" style="opacity:.7">Belum ada telemetri</div>
+        <div class="card-label" style="opacity:.7">{{ t('Belum ada telemetri') }}</div>
         {% endif %}
         {% if ctrls %}
         <div class="subdiv">
@@ -87,7 +87,7 @@
         </div>
         {% endif %}
         <div class="btn-row">
-            <a href="{{ url_for('device_detail', id=device.id) }}" class="btn-add" style="padding:8px 14px; font-size:.8rem;">BUKA <i class="fas fa-arrow-right"></i></a>
+            <a href="{{ url_for('device_detail', id=device.id) }}" class="btn-add" style="padding:8px 14px; font-size:.8rem;">{{ t('BUKA') }} <i class="fas fa-arrow-right"></i></a>
         </div>
         {% endif %}
 
@@ -111,10 +111,10 @@
 
 <div id="addModal">
     <div class="modal-content card">
-        <h3 style="margin-bottom: 20px;">Tambah Device Baru</h3>
+        <h3 style="margin-bottom: 20px;">{{ t('Tambah Device Baru') }}</h3>
         <form action="/add_device" method="POST">
             <div class="input-group">
-                <label>Nama Perangkat</label>
+                <label>{{ t('Nama Perangkat') }}</label>
                 <input type="text" name="name" placeholder="Misal: PC Server" required>
             </div>
             <div class="input-group">
@@ -123,12 +123,12 @@
                 <input type="hidden" name="type" value="Controller">
             </div>
             <div class="input-group">
-                <label>MQTT ID (kosongkan = auto, cth: shl-demo01)</label>
+                <label>{{ t('MQTT ID (kosongkan = auto, cth: shl-demo01)') }}</label>
                 <input type="text" name="mqtt_id" placeholder="shl-demo01">
             </div>
             {% if brokers|length > 1 %}
             <div class="input-group">
-                <label>Broker</label>
+                <label>{{ t('Broker') }}</label>
                 <select name="broker_id" class="dd">
                     {% for b in brokers %}
                     <option value="{{ b.id }}" {% if b.id == 1 %}selected{% endif %}>{{ b.name }} ({{ b.host }}:{{ b.port }})</option>
@@ -137,7 +137,7 @@
             </div>
             {% endif %}
 
-            <button type="submit" class="btn-submit">SIMPAN</button>
+            <button type="submit" class="btn-submit">{{ t('SIMPAN') }}</button>
             <button type="button" onclick="document.getElementById('addModal').style.display='none'"
                     style="background: transparent; color: white; border: none; margin-top: 10px; cursor: pointer; width: 100%;">
                 BATAL

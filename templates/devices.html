@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head">
     <h1>Perangkat</h1>
-    <p>Klik kartu untuk buka halaman perangkat (atur fungsi &amp; kontrol). Tambah baru lewat Dashboard.</p>
+    <p>{{ t('Klik kartu untuk buka halaman perangkat (atur fungsi & kontrol). Tambah baru lewat Dashboard.') }}</p>
 </div>
 <div class="grid">
     {% for d in devices %}
@@ -36,6 +36,6 @@
     {% endfor %}
 </div>
 {% if not devices %}
-<div class="card">Belum ada perangkat. Tambah lewat tombol di Dashboard.</div>
+<div class="card">{{ t('Belum ada perangkat. Tambah lewat tombol di Dashboard.') }}</div>
 {% endif %}
 {% endblock %}

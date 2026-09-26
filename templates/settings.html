@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head">
     <h1>Settings</h1>
-    <p>Pilih broker mana yang dipakai. Default: broker bawaan yang ikut paket compose.</p>
+    <p>{{ t('Pilih broker mana yang dipakai. Default: broker bawaan yang ikut paket compose.') }}</p>
 </div>
 {% if is_admin and stats %}
 <div class="card">
@@ -29,7 +29,7 @@
     </div>
     <div class="table-wrap">
         <table class="data stack">
-            <thead><tr><th>Nama</th><th>Host</th><th>TLS</th><th>Auth</th><th></th></tr></thead>
+            <thead><tr><th>{{ t('Nama') }}</th><th>Host</th><th>TLS</th><th>Auth</th><th></th></tr></thead>
             <tbody>
                 {% for b in brokers %}
                 <tr {% if not b.enabled %}style="opacity:.55;"{% endif %}>
@@ -38,7 +38,7 @@
                     <td data-label="TLS">{{ 'ya' if b.use_tls else 'tidak' }}</td>
                     <td data-label="Auth">{% if b.username %}<code>{{ b.username }}</code>{% else %}—{% endif %}</td>
                     <td data-label="Aksi">
-                        <a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_test', id=b.id) }}">Test</a>
+                        <a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_test', id=b.id) }}">{{ t('Test') }}</a>
                         {% if b.user_id == session.get('user_id') or is_admin %}<button class="btn" style="padding:6px 12px; font-size:.8rem;" title="Setting koneksi"
                             data-edit="{{ b.id }}" data-name="{{ b.name }}" data-host="{{ b.host }}" data-port="{{ b.port }}"
                             data-username="{{ b.username }}" data-tls="{{ 1 if b.use_tls else 0 }}" data-shared="{{ 1 if b.is_shared else 0 }}"
@@ -52,18 +52,17 @@
         </table>
     </div>
     <p style="font-size:.75rem; opacity:.65; margin-top:10px;">
-        Device memilih broker saat dibuat (dropdown di Tambah Perangkat). Bridge subscribe
-        semua koneksi aktif otomatis. Password broker eksternal disimpan apa adanya di DB.
-        Koneksi <i>shared</i> (oleh admin) terlihat semua user.
+        Broker dipilih saat tambah device. Password eksternal tersimpan apa adanya.
+        <i>Shared</i> terlihat semua user. Detail: dokumentasi.
     </p>
 </div>
 
 <div id="brokerModal">
     <div class="modal-content card" style="text-align:left;">
-        <h3 id="brokerModalTitle" style="margin-bottom:20px; text-align:center;">Tambah koneksi broker</h3>
+        <h3 id="brokerModalTitle" style="margin-bottom:20px; text-align:center;">{{ t('Tambah koneksi broker') }}</h3>
         <form id="brokerForm" action="{{ url_for('settings_broker_add') }}" method="POST">
             <div class="input-group">
-                <label>Nama (cth: Broker kantor)</label>
+                <label>{{ t('Nama (cth: Broker kantor)') }}</label>
                 <input type="text" name="name" id="bfName" placeholder="Broker kantor">
             </div>
             <div class="input-group">
@@ -71,15 +70,15 @@
                 <input type="text" name="host" id="bfHost" placeholder="192.168.1.50 atau mqtt.contoh.id" required>
             </div>
             <div class="input-group">
-                <label>Port MQTT</label>
+                <label>{{ t('Port MQTT') }}</label>
                 <input type="number" name="port" id="bfPort" value="1883" min="1" max="65535">
             </div>
             <div class="input-group">
-                <label>Username (kosongkan bila anonymous)</label>
+                <label>{{ t('Username (kosongkan bila anonymous)') }}</label>
                 <input type="text" name="username" id="bfUser" placeholder="user">
             </div>
             <div class="input-group">
-                <label>Password <span id="bfPwHint" style="opacity:.6;"></span></label>
+                <label>{{ t('Password') }} <span id="bfPwHint" style="opacity:.6;"></span></label>
                 <input type="password" name="password" id="bfPass" placeholder="••••••">
             </div>
             <div class="input-group">
@@ -94,7 +93,7 @@
                 </label>
             </div>
             {% endif %}
-            <button class="btn-submit" type="submit">SIMPAN</button>
+            <button class="btn-submit" type="submit">{{ t('SIMPAN') }}</button>
             <button type="button" onclick="closeBrokerModal()"
                     style="background: transparent; color: white; border: none; margin-top: 10px; cursor: pointer; width: 100%;">
                 BATAL
@@ -117,11 +116,13 @@
 {% block scripts %}
 <script>
     var ADD_URL = "{{ url_for('settings_broker_add') }}";
+    var T_ADD = "{{ t('Tambah koneksi broker') }}";
+    var T_EDIT = "{{ t('Setting koneksi broker') }}";
     function openBrokerModal(btn) {
         var form = document.getElementById('brokerForm');
         var title = document.getElementById('brokerModalTitle');
         if (btn && btn.getAttribute('data-edit')) {
-            title.textContent = 'Setting koneksi broker';
+            title.textContent = T_EDIT;
             form.action = "/settings/brokers/" + btn.getAttribute('data-edit') + "/edit";
             document.getElementById('bfName').value = btn.getAttribute('data-name') || '';
             document.getElementById('bfHost').value = btn.getAttribute('data-host') || '';
@@ -133,7 +134,7 @@
             if (sh) sh.checked = btn.getAttribute('data-shared') === '1';
             document.getElementById('bfPwHint').textContent = '(kosongkan = tetap)';
         } else {
-            title.textContent = 'Tambah koneksi broker';
+            title.textContent = T_ADD;
             form.action = ADD_URL;
             form.reset();
             document.getElementById('bfPort').value = '1883';
