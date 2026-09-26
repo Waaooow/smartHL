@@ -24,8 +24,8 @@
 {% endif %}
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-        <h3 style="margin:0;"><i class="fas fa-plug"></i> Koneksi broker</h3>
-        <button class="btn-add" style="padding:8px 16px; font-size:.85rem;" onclick="openBrokerModal()"><i class="fas fa-plus"></i> Add</button>
+        <h3 style="margin:0;"><i class="fas fa-plug"></i> {{ t('Koneksi broker') }}</h3>
+        <button class="btn-add" style="padding:8px 16px; font-size:.85rem;" onclick="openBrokerModal()"><i class="fas fa-plus"></i> {{ t('Tambah') }}</button>
     </div>
     <div class="table-wrap">
         <table class="data stack">
@@ -33,9 +33,9 @@
             <tbody>
                 {% for b in brokers %}
                 <tr {% if not b.enabled %}style="opacity:.55;"{% endif %}>
-                    <td data-label="Nama"><b>{{ b.name }}</b>{% if b.id == 1 %} <span style="font-size:.75rem; opacity:.7;">(bawaan)</span>{% endif %}{% if b.is_shared %} <span style="font-size:.75rem; background:rgba(76,209,55,.3); border-radius:8px; padding:2px 8px;">shared</span>{% endif %}{% if not b.enabled %} <span style="font-size:.75rem; background:rgba(255,71,87,.35); border-radius:8px; padding:2px 8px;">mati</span>{% endif %}</td>
+                    <td data-label="Nama"><b>{{ b.name }}</b>{% if b.id == 1 %} <span style="font-size:.75rem; opacity:.7;">{{ t('(bawaan)') }}</span>{% endif %}{% if b.is_shared %} <span style="font-size:.75rem; background:rgba(76,209,55,.3); border-radius:8px; padding:2px 8px;">shared</span>{% endif %}{% if not b.enabled %} <span style="font-size:.75rem; background:rgba(255,71,87,.35); border-radius:8px; padding:2px 8px;">{{ t('mati') }}</span>{% endif %}</td>
                     <td data-label="Host"><code>{{ b.host }}:{{ b.port }}</code></td>
-                    <td data-label="TLS">{{ 'ya' if b.use_tls else 'tidak' }}</td>
+                    <td data-label="TLS">{{ t('ya') if b.use_tls else t('tidak') }}</td>
                     <td data-label="Auth">{% if b.username %}<code>{{ b.username }}</code>{% else %}—{% endif %}</td>
                     <td data-label="Aksi">
                         <a class="btn" style="padding:6px 12px; font-size:.8rem;" href="{{ url_for('settings_broker_test', id=b.id) }}">{{ t('Test') }}</a>
@@ -109,7 +109,7 @@
             <option value="id" {% if session.get('lang', 'id') == 'id' %}selected{% endif %}>Indonesia</option>
             <option value="en" {% if session.get('lang') == 'en' %}selected{% endif %}>English</option>
         </select>
-        <button class="btn" type="submit">SIMPAN</button>
+        <button class="btn" type="submit">{{ t('SIMPAN') }}</button>
     </form>
 </div>
 {% endblock %}

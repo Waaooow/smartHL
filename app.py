@@ -282,7 +282,7 @@ def login_action():
     if user and ok:
         if 'is_active' in user.keys() and not user['is_active']:
             conn.close()
-            flash('Akun dinonaktifkan, hubungi admin', 'error')
+            flash(L('Akun dinonaktifkan, hubungi admin'), 'error')
             return redirect(url_for('login_page'))
         session['logged_in'] = True
         session['user_id'] = user['id']
@@ -295,7 +295,7 @@ def login_action():
         conn.close()
         return redirect(url_for('dashboard'))
     conn.close()
-    flash('Username atau password salah!', 'error')
+    flash(L('Username atau password salah!'), 'error')
     return redirect(url_for('login_page'))
 
 def _uid():
@@ -407,10 +407,10 @@ def add_device():
         conn.commit()
     except Exception:
         conn.close()
-        flash(f'MQTT ID {mqtt_id} sudah dipakai (harus unik global)', 'error')
+        flash(L('MQTT ID {mqtt_id} sudah dipakai (harus unik global)', mqtt_id=mqtt_id), 'error')
         return redirect(url_for('dashboard'))
     conn.close()
-    flash(f'Device {name} dibuat. MQTT ID: {mqtt_id}', 'success')
+    flash(L('Device {name} dibuat. MQTT ID: {mqtt_id}', name=name, mqtt_id=mqtt_id), 'success')
     return redirect(url_for('dashboard'))
 
 @app.route('/wol/<int:id>')
@@ -425,9 +425,9 @@ def wake_device(id):
         try:
             # Kirim magic packet lewat interface yang ditentukan user (misal: eth0)
             send_magic_packet(device['mac_address'], interface=device['interface'])
-            flash(f"Magic Packet dikirim ke {device['name']} via {device['interface']}!", 'success')
+            flash(L('Magic Packet dikirim ke {name} via {interface}!', name=device['name'], interface=device['interface']), 'success')
         except Exception as e:
-            flash(f"Gagal mengirim WoL: {str(e)}", 'error')
+            flash(L('Gagal mengirim WoL: {e}', e=str(e)), 'error')
     return redirect(url_for('dashboard'))
 
 @app.route('/delete_device/<int:id>')
@@ -451,7 +451,7 @@ def device_cmd(id):
     device = owned_device(conn, id)
     conn.close()
     if not device or not device['mqtt_id']:
-        flash('Device belum punya MQTT ID', 'error')
+        flash(L('Device belum punya MQTT ID'), 'error')
         return redirect(url_for('dashboard'))
     led = request.form.get('led', '0')
     try:
@@ -466,9 +466,9 @@ def device_cmd(id):
         conn.close()
         mqtt_pub(f"smarthl/{device['mqtt_id']}/down/cmd", {"led": v},
                  device.get('broker_id') or 1, retain=True)
-        flash(f"Perintah LED={led} dikirim ke {device['name']}", 'success')
+        flash(L('Perintah LED={led} dikirim ke {name}', led=led, name=device['name']), 'success')
     except Exception as e:
-        flash(f"Gagal kirim MQTT: {e}", 'error')
+        flash(L('Gagal kirim MQTT: {e}', e=e), 'error')
     return redirect(url_for('dashboard'))
 
 @app.route('/device/<int:id>')
@@ -550,17 +550,17 @@ def device_action(id):
     device = owned_device(conn, id)
     conn.close()
     if not device or not device['mqtt_id']:
-        flash('Device belum punya MQTT ID', 'error')
+        flash(L('Device belum punya MQTT ID'), 'error')
         return redirect(url_for('dashboard'))
     key = (request.form.get('key') or '').strip().lower()
     raw = request.form.get('value', '0')
     if not key or not key.replace('_', '').isalnum():
-        flash('Key fungsi tidak valid', 'error')
+        flash(L('Key fungsi tidak valid'), 'error')
         return redirect(url_for('device_detail', id=id))
     try:
         value = float(raw)
     except ValueError:
-        flash('Value harus angka', 'error')
+        flash(L('Value harus angka'), 'error')
         return redirect(url_for('device_detail', id=id))
     conn = get_db_connection()
     func = conn.execute('SELECT kind FROM device_functions WHERE device_id=? AND key=?',
@@ -583,11 +583,11 @@ def device_action(id):
     except Exception as e:
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({"ok": False, "error": str(e)}), 502
-        flash(f"Gagal kirim MQTT: {e}", 'error')
+        flash(L('Gagal kirim MQTT: {e}', e=e), 'error')
         return redirect(request.form.get('next') or url_for('device_detail', id=id))
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({"ok": True, "key": key, "value": value})
-    flash(f"Terkirim ke {device['name']}: {key}={raw}", 'success')
+    flash(L('Terkirim ke {name}: {key}={raw}', name=device['name'], key=key, raw=raw), 'success')
     return redirect(request.form.get('next') or url_for('device_detail', id=id))
 
 @app.route('/device/<int:id>/functions', methods=['POST'])
@@ -604,7 +604,7 @@ def add_function(id):
     unit = (request.form.get('unit') or '').strip()
     pin = (request.form.get('pin') or '').strip()
     if kind not in FUNC_KINDS or not key or not key.replace('_', '').isalnum():
-        flash('Fungsi tidak valid (key alfanumerik, kind: sensor/toggle/button/slider)', 'error')
+        flash(L('Fungsi tidak valid (key alfanumerik, kind: sensor/toggle/button/slider)'), 'error')
         return redirect(url_for('device_detail', id=id))
     def _num(v):
         v = (v or '').strip()
@@ -622,9 +622,9 @@ def add_function(id):
             " VALUES (?,?,?,?,?,?,COALESCE((SELECT MAX(sort)+1 FROM device_functions WHERE device_id=?),1),?,?)",
             (id, key, label, kind, unit, pin, id, alert_above, alert_below))
         conn.commit()
-        flash(f"Fungsi {label} ditambah", 'success')
+        flash(L('Fungsi {label} ditambah', label=label), 'success')
     except Exception:
-        flash(f"Key '{key}' sudah ada di device ini", 'error')
+        flash(L("Key '{key}' sudah ada di device ini", key=key), 'error')
     conn.close()
     return redirect(url_for('device_detail', id=id))
 
@@ -659,7 +659,7 @@ def update_function(fid):
     pin = (request.form.get('pin') or '').strip()
     if kind not in FUNC_KINDS:
         conn.close()
-        flash('Kind tidak valid', 'error')
+        flash(L('Kind tidak valid'), 'error')
         return redirect(url_for('edit_function', fid=fid))
     def _num(v):
         v = (v or '').strip()
@@ -675,7 +675,7 @@ def update_function(fid):
          _num(request.form.get('alert_below')), fid))
     conn.commit()
     conn.close()
-    flash(f"Fungsi {f['key']} disimpan", 'success')
+    flash(L('Fungsi {key} disimpan', key=f['key']), 'success')
     return redirect(url_for('device_detail', id=f['device_id']))
 
 @app.route('/device/<int:id>/functions/quick', methods=['POST'])
@@ -690,7 +690,7 @@ def quick_function(id):
     key = (request.form.get('key') or '').strip().lower()
     if not key or not key.replace('_', '').isalnum() or len(key) > 24:
         conn.close()
-        flash('Key tidak valid', 'error')
+        flash(L('Key tidak valid'), 'error')
         return redirect(url_for('device_detail', id=id))
     try:
         conn.execute(
@@ -698,9 +698,9 @@ def quick_function(id):
             " VALUES (?,?,?,'sensor',COALESCE((SELECT MAX(sort)+1 FROM device_functions WHERE device_id=?),1))",
             (id, key, key, id))
         conn.commit()
-        flash(f"Key {key} dijadikan fungsi (sensor). Edit bila perlu.", 'success')
+        flash(L('Key {key} dijadikan fungsi (sensor). Edit bila perlu.', key=key), 'success')
     except Exception:
-        flash(f"Key '{key}' sudah terdaftar", 'error')
+        flash(L("Key '{key}' sudah terdaftar", key=key), 'error')
     conn.close()
     return redirect(url_for('device_detail', id=id))
 
@@ -840,17 +840,17 @@ def profile_update():
                   else stored == request.form.get('current_password', ''))
         if not cur_ok:
             conn.close()
-            flash('Password lama salah', 'error')
+            flash(L('Password lama salah'), 'error')
             return redirect(url_for('profile_page'))
         if len(new_pw) < 4:
             conn.close()
-            flash('Password baru minimal 4 karakter', 'error')
+            flash(L('Password baru minimal 4 karakter'), 'error')
             return redirect(url_for('profile_page'))
         conn.execute('UPDATE users SET password=? WHERE id=?',
                      (generate_password_hash(new_pw), user['id']))
     conn.commit()
     conn.close()
-    flash('Profil disimpan', 'success')
+    flash(L('Profil disimpan'), 'success')
     return redirect(url_for('profile_page'))
 
 @app.route('/notifications')
@@ -885,7 +885,7 @@ def notifications_read():
                (SELECT id FROM devices WHERE owner_id=?))""", (_uid(),))
     conn.commit()
     conn.close()
-    flash('Semua notifikasi ditandai dibaca', 'success')
+    flash(L('Semua notifikasi ditandai dibaca'), 'success')
     return redirect(url_for('notifications_page'))
 
 @app.route('/api/notifications')
@@ -952,16 +952,16 @@ def users_create():
     password = request.form.get('password') or ''
     display = (request.form.get('display_name') or username).strip()
     if not username or not username.replace('_', '').isalnum() or len(password) < 4:
-        flash('Username alfanumerik + password min. 4 karakter', 'error')
+        flash(L('Username alfanumerik + password min. 4 karakter'), 'error')
         return redirect(url_for('users_page'))
     conn = get_db_connection()
     try:
         conn.execute('INSERT INTO users (username, password, display_name, is_admin) VALUES (?,?,?,0)',
                      (username, generate_password_hash(password), display))
         conn.commit()
-        flash(f'User {username} dibuat', 'success')
+        flash(L('User {username} dibuat', username=username), 'success')
     except Exception:
-        flash(f'Username {username} sudah dipakai', 'error')
+        flash(L('Username {username} sudah dipakai', username=username), 'error')
     conn.close()
     return redirect(url_for('users_page'))
 
@@ -970,7 +970,7 @@ def users_delete(id):
     if not session.get('logged_in') or not _admin():
         return redirect(url_for('dashboard'))
     if id == session.get('user_id'):
-        flash('Tidak bisa hapus akun sendiri', 'error')
+        flash(L('Tidak bisa hapus akun sendiri'), 'error')
         return redirect(url_for('users_page'))
     conn = get_db_connection()
     devs = conn.execute('SELECT id FROM devices WHERE owner_id=?', (id,)).fetchall()
@@ -982,7 +982,7 @@ def users_delete(id):
     conn.execute('DELETE FROM users WHERE id=?', (id,))
     conn.commit()
     conn.close()
-    flash('User + semua device-nya dihapus', 'success')
+    flash(L('User + semua device-nya dihapus'), 'success')
     return redirect(url_for('users_page'))
 
 @app.route('/users/<int:id>')
@@ -1019,13 +1019,13 @@ def users_update(id):
     if new_pw:
         if len(new_pw) < 4:
             conn.close()
-            flash('Password baru minimal 4 karakter', 'error')
+            flash(L('Password baru minimal 4 karakter'), 'error')
             return redirect(url_for('users_edit', id=id))
         conn.execute('UPDATE users SET password=? WHERE id=?',
                      (generate_password_hash(new_pw), id))
     conn.commit()
     conn.close()
-    flash(f'User {u["username"]} disimpan' + (' (password direset)' if new_pw else ''), 'success')
+    flash(L('User {username} disimpan', username=u['username']) + (L(' (password direset)') if new_pw else ''), 'success')
     return redirect(url_for('users_edit', id=id))
 
 @app.before_request
@@ -1043,7 +1043,7 @@ def _refresh_session():
         session.clear()
         if request.path.startswith('/api/'):
             return jsonify({"error": "unauthorized"}), 401
-        flash('Akun dinonaktifkan', 'error')
+        flash(L('Akun dinonaktifkan'), 'error')
         return redirect(url_for('login_page'))
     session['is_admin'] = bool(u['is_admin'])
     if u['display_name']:
@@ -1089,7 +1089,7 @@ def settings_broker_add():
     except ValueError:
         port = 1883
     if not host:
-        flash('Host broker wajib diisi', 'error')
+        flash(L('Host broker wajib diisi'), 'error')
         return redirect(url_for('settings_page'))
     conn = get_db_connection()
     try:
@@ -1103,7 +1103,7 @@ def settings_broker_add():
             (host, port, _uid())).fetchone()
     if dup:
         conn.close()
-        flash('Broker itu sudah ada di daftar (cek host+port)', 'error')
+        flash(L('Broker itu sudah ada di daftar (cek host+port)'), 'error')
         return redirect(url_for('settings_page'))
     shared = 1 if (_admin() and request.form.get('is_shared')) else 0
     conn.execute(
@@ -1120,7 +1120,7 @@ def settings_broker_add():
     conn.close()
     # Langsung subscribe tanpa restart app (thread daemon di proses ini)
     spawn_bridge(row)
-    flash(f'Broker {name} ditambah + bridge langsung subscribe.', 'success')
+    flash(L('Broker {name} ditambah + bridge langsung subscribe.', name=name), 'success')
     return redirect(url_for('settings_page'))
 
 def spawn_bridge(row):
@@ -1148,7 +1148,7 @@ def settings_broker_toggle(id):
         return redirect(url_for('settings_page'))
     if id == 1 and not _admin():
         conn.close()
-        flash('Hanya admin yang boleh menonaktifkan broker bawaan', 'error')
+        flash(L('Hanya admin yang boleh menonaktifkan broker bawaan'), 'error')
         return redirect(url_for('settings_page'))
     if b['user_id'] != _uid() and not _admin():
         conn.close()
@@ -1160,9 +1160,9 @@ def settings_broker_toggle(id):
     conn.close()
     if new:
         spawn_bridge(row)
-        flash(f"{row['name']}: diaktifkan + langsung subscribe", 'success')
+        flash(L('{name}: diaktifkan + langsung subscribe', name=row['name']), 'success')
     else:
-        flash(f"{row['name']}: dinonaktifkan (thread berhenti sendiri)", 'success')
+        flash(L('{name}: dinonaktifkan (thread berhenti sendiri)', name=row['name']), 'success')
     return redirect(url_for('settings_page'))
 
 LANGS = {
@@ -1180,8 +1180,60 @@ LANGS = {
         'Username (kosongkan bila anonymous)': 'Username (empty if anonymous)',
         'Nama (cth: Broker kantor)': 'Name (e.g. Office broker)',
         'cth: relay1': 'e.g. relay1', 'cth: Relay Pompa': 'e.g. Pump Relay',
+        'Koneksi broker': 'Broker connections',
+        'mati': 'off',
         'Tambah user': 'Add user', 'Tambah koneksi broker': 'Add broker connection',
         'Setting koneksi broker': 'Edit broker connection',
+        'Username atau password salah!': 'Wrong username or password!',
+        'Profil disimpan': 'Profile saved',
+        'Password lama salah': 'Wrong current password',
+        'Password baru minimal 4 karakter': 'New password must be at least 4 characters',
+        'Device belum punya MQTT ID': 'Device has no MQTT ID yet',
+        'Key fungsi tidak valid': 'Invalid function key',
+        'Key tidak valid': 'Invalid key',
+        'Kind tidak valid': 'Invalid kind',
+        'Value harus angka': 'Value must be a number',
+        'Gagal kirim MQTT: {e}': 'MQTT send failed: {e}',
+        'Terkirim ke {name}: {key}={raw}': 'Sent to {name}: {key}={raw}',
+        'Perintah LED={led} dikirim ke {name}': 'LED={led} command sent to {name}',
+        'Fungsi tidak valid (key alfanumerik, kind: sensor/toggle/button/slider)': 'Invalid function (alphanumeric key, kind: sensor/toggle/button/slider)',
+        'Fungsi {label} ditambah': 'Function {label} added',
+        "Key '{key}' sudah ada di device ini": "Key '{key}' already exists on this device",
+        "Key '{key}' sudah terdaftar": "Key '{key}' is already registered",
+        'Key {key} dijadikan fungsi (sensor). Edit bila perlu.': 'Key {key} registered as a (sensor) function. Edit if needed.',
+        'Fungsi {key} disimpan': 'Function {key} saved',
+        'Device {name} dibuat. MQTT ID: {mqtt_id}': 'Device {name} created. MQTT ID: {mqtt_id}',
+        'MQTT ID {mqtt_id} sudah dipakai (harus unik global)': 'MQTT ID {mqtt_id} is taken (must be globally unique)',
+        'Host broker wajib diisi': 'Broker host is required',
+        'Broker itu sudah ada di daftar (cek host+port)': 'That broker is already listed (check host+port)',
+        'Host+port itu sudah ada di daftar': 'That host+port is already listed',
+        'Broker bawaan tidak bisa dihapus': 'The built-in broker cannot be deleted',
+        'Hanya admin yang boleh menonaktifkan broker bawaan': 'Only admins can disable the built-in broker',
+        'Koneksi broker dihapus': 'Broker connection deleted',
+        'Koneksi {name} disimpan. Berlaku penuh setelah restart app.': 'Connection {name} saved. Fully applies after app restart.',
+        'Broker {name} ditambah + bridge langsung subscribe.': 'Broker {name} added, bridge subscribing.',
+        '{name}: dinonaktifkan (thread berhenti sendiri)': '{name}: disabled (thread stops on its own)',
+        '{name}: diaktifkan + langsung subscribe': '{name}: enabled, subscribing now',
+        '{name}: TCP {host}:{port} TERHUBUNG': '{name}: TCP {host}:{port} CONNECTED',
+        '{name}: gagal ({e})': '{name}: failed ({e})',
+        'Masih dipakai {n} device, pindahkan dulu': 'Still used by {n} device(s), move them first',
+        'Username alfanumerik + password min. 4 karakter': 'Alphanumeric username + password min. 4 chars',
+        'User {username} dibuat': 'User {username} created',
+        'Username {username} sudah dipakai': 'Username {username} is taken',
+        'User + semua device-nya dihapus': 'User and all their devices deleted',
+        'Tidak bisa hapus akun sendiri': 'You cannot delete your own account',
+        'User {username} disimpan': 'User {username} saved',
+        ' (password direset)': ' (password reset)',
+        'Semua notifikasi ditandai dibaca': 'All notifications marked as read',
+        'Akun dinonaktifkan': 'Account deactivated',
+        'Akun dinonaktifkan, hubungi admin': 'Account deactivated, contact an admin',
+        'Magic Packet dikirim ke {name} via {interface}!': 'Magic packet sent to {name} via {interface}!',
+        'Gagal mengirim WoL: {e}': 'WoL send failed: {e}',
+        'Koneksi broker': 'Broker connections',
+        'mati': 'off',
+        'tidak': 'no',
+        'ya': 'yes',
+        '(bawaan)': '(built-in)',
         # Dashboard & perangkat
         'Monitoring sistem SmartHome anda.': 'Monitor and control all your devices.',
         'Tambah Perangkat': 'Add Device', 'Tambah Device Baru': 'New Device',
@@ -1196,7 +1248,8 @@ LANGS = {
         'Belum ada kontrol. Buka halaman device → tambah fungsi kind toggle/button/slider.': 'No controls yet. Open a device page and add a toggle/button/slider function.',
         # Settings
         'Pilih broker mana yang dipakai. Default: broker bawaan yang ikut paket compose.': 'Choose which broker to use. Default: the bundled broker.',
-        'Koneksi broker': 'Broker connections', 'Tambah koneksi broker': 'Add broker connection',
+        'Koneksi broker': 'Broker connections',
+        'mati': 'off', 'Tambah koneksi broker': 'Add broker connection',
         # Notifikasi & pengguna
         'Semua notifikasi ditandai dibaca': 'All notifications marked as read',
         'Tandai semua dibaca': 'Mark all as read',
@@ -1209,6 +1262,16 @@ LANGS = {
 def _lang():
     l = session.get('lang', 'id')
     return l if l in LANGS else 'id'
+
+def L(s, **kw):
+    """Pesan UI server-side mengikuti bahasa sesi (fallback Indonesia)."""
+    out = LANGS.get(_lang(), {}).get(s, s)
+    if kw:
+        try:
+            out = out.format(**kw)
+        except Exception:
+            pass
+    return out
 
 @app.context_processor
 def _inject_t():
@@ -1251,14 +1314,14 @@ def settings_broker_edit(id):
         port = b['port'] or 1883
     if not host:
         conn.close()
-        flash('Host broker wajib diisi', 'error')
+        flash(L('Host broker wajib diisi'), 'error')
         return redirect(url_for('settings_page'))
     dup = conn.execute(
         'SELECT id FROM broker_connections WHERE host=? AND port=? AND id!=? AND (id=1 OR user_id=? OR is_shared=1)',
         (host, port, id, _uid())).fetchone()
     if dup:
         conn.close()
-        flash('Host+port itu sudah ada di daftar', 'error')
+        flash(L('Host+port itu sudah ada di daftar'), 'error')
         return redirect(url_for('settings_page'))
     pw = request.form.get('password') or ''
     conn.execute(
@@ -1269,7 +1332,7 @@ def settings_broker_edit(id):
         ((pw,) if pw else ()) + ((1 if (_admin() and request.form.get('is_shared')) else 0), id))
     conn.commit()
     conn.close()
-    flash(f'Koneksi {name} disimpan. Berlaku penuh setelah restart app.', 'success')
+    flash(L('Koneksi {name} disimpan. Berlaku penuh setelah restart app.', name=name), 'success')
     return redirect(url_for('settings_page'))
 
 @app.route('/settings/brokers/<int:id>/delete')
@@ -1277,7 +1340,7 @@ def settings_broker_delete(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
     if id == 1:
-        flash('Broker bawaan tidak bisa dihapus', 'error')
+        flash(L('Broker bawaan tidak bisa dihapus'), 'error')
         return redirect(url_for('settings_page'))
     conn = get_db_connection()
     b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone()
@@ -1287,12 +1350,12 @@ def settings_broker_delete(id):
     n = conn.execute('SELECT COUNT(*) c FROM devices WHERE broker_id=?', (id,)).fetchone()['c']
     if n:
         conn.close()
-        flash(f'Masih dipakai {n} device, pindahkan dulu', 'error')
+        flash(L('Masih dipakai {n} device, pindahkan dulu', n=n), 'error')
         return redirect(url_for('settings_page'))
     conn.execute('DELETE FROM broker_connections WHERE id=?', (id,))
     conn.commit()
     conn.close()
-    flash('Koneksi broker dihapus', 'success')
+    flash(L('Koneksi broker dihapus'), 'success')
     return redirect(url_for('settings_page'))
 
 @app.route('/settings/brokers/<int:id>/test')
@@ -1308,9 +1371,9 @@ def settings_broker_test(id):
     try:
         with socket.create_connection((b['host'], int(b['port'] or 1883)), timeout=5):
             pass
-        flash(f"{b['name']}: TCP {b['host']}:{b['port']} TERHUBUNG", 'success')
+        flash(L('{name}: TCP {host}:{port} TERHUBUNG', name=b['name'], host=b['host'], port=b['port']), 'success')
     except Exception as e:
-        flash(f"{b['name']}: gagal ({e})", 'error')
+        flash(L('{name}: gagal ({e})', name=b['name'], e=e), 'error')
     return redirect(url_for('settings_page'))
 
 def _start_bridge_thread():
