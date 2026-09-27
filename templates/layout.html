@@ -255,12 +255,12 @@
     h.type = 'hidden'; h.name = 'csrf_token'; h.value = meta.content;
     f.appendChild(h);
   });
-  function csrfHeaders(h) {
+  window.csrfHeaders = function(h) {
     h = h || {};
     var meta = document.querySelector('meta[name=csrf-token]');
     if (meta) h['X-CSRFToken'] = meta.content;
     return h;
-  }
+  };
 
   // Drawer mobile
   var sb = document.getElementById('sidebar');
