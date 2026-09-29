@@ -1,5 +1,10 @@
 services:
   mariadb:
+    # Opsional seperti mosquitto. DB bawaan:
+    #   docker compose --profile db up -d
+    # DB eksternal: kosongkan profile ini, set DB_HOST/DB_PORT/DB_USER/
+    # DB_PASS/DB_NAME di .env ke server database-mu.
+    profiles: ["db"]
     image: mariadb:11
     restart: unless-stopped
     environment:
@@ -60,11 +65,8 @@ services:
       SECRET_KEY: ${SECRET_KEY:?isi SECRET_KEY di .env}
       SECURE_COOKIES: ${SECURE_COOKIES:-0}
       TELEMETRY_RETENTION_DAYS: ${TELEMETRY_RETENTION_DAYS:-90}
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      # mosquitto TIDAK di-depends_on: ia opsional (profile broker).
-      # Bridge retry sendiri bila broker belum/tidak ada.
+    # Tanpa depends_on: mariadb & mosquitto opsional (profile).
+    # App + bridge retry sendiri (DB hingga ~60 dtk, broker selamanya).
 
 volumes:
   mariadb-data:

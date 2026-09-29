@@ -46,14 +46,27 @@ kill -HUP $(pgrep -f 'mosquitto.*local.conf')   # lokal; di docker: compose rest
 cp .env.example .env   # isi SECRET_KEY, DB_PASS, DB_ROOT_PASS, BRIDGE_PASSWORD
 # Dashboard saja (pakai broker luar via Settings):
 docker compose up -d --build
-# Lengkap dengan broker bawaan:
-docker compose --profile broker up -d --build
+# + database bawaan:   docker compose --profile db up -d --build
+# + broker bawaan:     docker compose --profile broker up -d --build
+# lengkap:             docker compose --profile db --profile broker up -d --build
 docker compose logs -f app
 ```
+Kombinasi bebas: DB eksternal + broker bawaan, atau sebaliknya.
 Tanpa broker bawaan: matikan baris "Broker bawaan" di Settings (tombol power,
 khusus admin) agar bridge tidak retry terus. Device yang broker-nya broker
 bawaan akan gagal kirim (pesan error wajar) — pindahkan device ke broker luar
 atau ikutkan `--profile broker`.
+
+## Database di server terpisah
+
+1. Di server DB, buat database + user remote (lihat contoh SQL di `.env.example`).
+2. Di `.env`: `DB_HOST=<ip-server-db>`, `DB_PORT=3306`, samakan
+   `DB_NAME/DB_USER/DB_PASS`. Jangan nyalakan profile `db`.
+3. `docker compose up -d --build` — skema dibuat otomatis saat pertama jalan.
+4. Pindah data lama (opsional): dari stack lama
+   `docker compose exec mariadb mariadb-dump -uroot -p"$DB_ROOT_PASS" smarthl > pindah.sql`
+   lalu di server baru `mysql -u... smarthl < pindah.sql`.
+5. `scripts/backup.sh` hanya untuk mode DB bawaan.
 * Dashboard: `http://<ip-server>:5000` (prod: reverse-proxy + TLS di depan,
   cth `https://iot.alfins.my.id` via Cloudflare proxy ON).
 * Broker MQTT: `<ip-server>:1883`, WebSocket `:9001`.
