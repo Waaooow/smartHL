@@ -291,16 +291,37 @@ def init_db():
         conn.execute('UPDATE devices SET broker_id=1 WHERE broker_id IS NULL')
     except Exception:
         pass
-    # broker bawaan (id=1, global). Host ikut env agar benar di lokal & compose.
+    # broker bawaan (id=1, global): seed HANYA bila tabel masih kosong
+    # (fresh install) DAN host-nya terjangkau. Kalau user menghapusnya,
+    # jangan lahirkan lagi. Host ikut env agar benar di lokal & compose.
     try:
-        has = conn.execute('SELECT id FROM broker_connections WHERE id=1').fetchone()
-        if not has:
-            conn.execute(
-                'INSERT INTO broker_connections (id, user_id, name, host, port, ws_port, use_tls, enabled)'
-                ' VALUES (1, NULL, ?, ?, 1883, 9001, 0, 1)',
-                ('Broker bawaan (include)', os.environ.get('MQTT_HOST', '127.0.0.1')))
-    except Exception:
-        pass
+        n = conn.execute('SELECT COUNT(*) c FROM broker_connections').fetchone()['c']
+        if not n:
+            host = os.environ.get('MQTT_HOST', '127.0.0.1')
+            try:
+                port = int(os.environ.get('MQTT_PORT', '1883'))
+            except ValueError:
+                port = 1883
+            found = False
+            for _ in range(6):
+                try:
+                    import socket as _sock
+                    with _sock.create_connection((host, port), timeout=3):
+                        found = True
+                    break
+                except Exception:
+                    import time as _t
+                    _t.sleep(5)
+            if found:
+                conn.execute(
+                    'INSERT INTO broker_connections (id, user_id, name, host, port, ws_port, use_tls, enabled)'
+                    ' VALUES (1, NULL, ?, ?, 1883, 9001, 0, 1)',
+                    ('Broker bawaan (include)', host))
+                print(f"[smarthl] broker bawaan terdeteksi di {host}:{port}", flush=True)
+            else:
+                print(f"[smarthl] tanpa broker bawaan ({host}:{port} tak terjangkau)", flush=True)
+    except Exception as e:
+        print(f"[smarthl] seed broker skip: {e}", flush=True)
 
     # 3. User dummy
     try:
@@ -1421,14 +1442,13 @@ def settings_broker_edit(id):
 def settings_broker_delete(id):
     if not session.get('logged_in'):
         return redirect(url_for('login_page'))
-    if id == 1:
-        flash(L('Broker bawaan tidak bisa dihapus'), 'error')
-        return redirect(url_for('settings_page'))
     conn = get_db_connection()
     b = conn.execute('SELECT * FROM broker_connections WHERE id=?', (id,)).fetchone()
     if not b or (b['user_id'] != _uid() and not _admin()):
         conn.close()
         return redirect(url_for('settings_page'))
+    # Catatan: broker bawaan (id=1) BOLEH dihapus untuk mode dashboard-saja.
+    # Seed ulang hanya terjadi bila tabel koneksi kosong total + host terjangkau.
     n = conn.execute('SELECT COUNT(*) c FROM devices WHERE broker_id=?', (id,)).fetchone()['c']
     if n:
         conn.close()

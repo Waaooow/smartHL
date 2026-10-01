@@ -23,17 +23,22 @@ def db():
 
 
 def load_brokers():
-    """Koneksi broker aktif dari DB + pastikan default id=1 ada."""
+    """Koneksi broker aktif dari DB. Fallback env hanya bila tabel masih kosong."""
     conn = db()
     try:
         rows = conn.execute(
             "SELECT * FROM broker_connections WHERE enabled=1 ORDER BY id").fetchall()
     except Exception:
         rows = []
-    if not any(r["id"] == 1 for r in rows):
-        rows = [{"id": 1, "name": "Broker bawaan", "host": BROKER_HOST,
-                 "port": BROKER_PORT, "username": BROKER_USER,
-                 "password": BROKER_PASS, "use_tls": 0}] + list(rows)
+    if not rows:
+        try:
+            total = conn.execute("SELECT COUNT(*) c FROM broker_connections").fetchone()["c"]
+        except Exception:
+            total = 0
+        if not total:
+            rows = [{"id": 1, "name": "Broker bawaan", "host": BROKER_HOST,
+                     "port": BROKER_PORT, "username": BROKER_USER,
+                     "password": BROKER_PASS, "use_tls": 0}]
     conn.close()
     return rows
 
@@ -70,15 +75,7 @@ def ensure_schema():
         conn.execute("ALTER TABLE broker_connections ADD COLUMN is_shared INTEGER DEFAULT 0")
     except Exception:
         pass
-    try:
-        has = conn.execute('SELECT id FROM broker_connections WHERE id=1').fetchone()
-        if not has:
-            conn.execute(
-                'INSERT INTO broker_connections (id, user_id, name, host, port, ws_port, use_tls, enabled)'
-                ' VALUES (1, NULL, ?, ?, 1883, 9001, 0, 1)',
-                ('Broker bawaan (include)', BROKER_HOST))
-    except Exception:
-        pass
+    # Seed broker bawaan = tugas app.init_db (dengan probe). Bridge hanya siapkan tabel.
     for col in ["mqtt_id TEXT", "token TEXT", "last_seen DATETIME", "broker_id INTEGER DEFAULT 1"]:
         try:
             conn.execute(f"ALTER TABLE devices ADD COLUMN {col}")
