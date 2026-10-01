@@ -52,8 +52,8 @@ services:
       - "${APP_PORT:-5000}:5000"
     environment:
       DB_TYPE: mariadb
-      DB_HOST: mariadb
-      DB_PORT: 3306
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-smarthl}
       DB_USER: ${DB_USER:-smarthl}
       DB_PASS: ${DB_PASS:?isi DB_PASS di .env}
